@@ -162,7 +162,7 @@ go_to_menu() {
   *browse*|*open*) select_project_menu ;;
   *add\ worktree*) add_worktree_menu ;;
   *delete\ worktree*) delete_worktree_unified_menu ;;
-  *add\ project*) omarchy-launch-floating-terminal-with-presentation "omarchy-rails-worktree-init" ;;
+  *add\ project*) omarchy-launch-floating-terminal-with-presentation "bash -c 'set -euo pipefail; source \"${LIB_DIR}/common.sh\"; worktree_init_project'" ;;
   esac
 }
 
@@ -185,7 +185,7 @@ add_worktree_menu() {
     cd "$project_dir" || die "Failed to change to project directory: $project_dir"
     export APP_NAME
     APP_NAME=$(basename "$project_dir")
-    omarchy-launch-floating-terminal-with-presentation "${SCRIPT_DIR}/omarchy-rails-worktree-create"
+    omarchy-launch-floating-terminal-with-presentation "bash -c 'set -euo pipefail; cd \"${project_dir}\"; source \"${LIB_DIR}/common.sh\"; worktree_create_branch'"
   fi
 }
 
@@ -268,8 +268,8 @@ delete_worktree_unified_menu() {
     return
   fi
 
-  # Launch deletion script
-  omarchy-launch-floating-terminal-with-presentation "$SCRIPT_DIR/omarchy-rails-worktree-delete" "$branch"
+  # Launch deletion function
+  omarchy-launch-floating-terminal-with-presentation "bash -c 'set -euo pipefail; cd \"${project_dir}\"; export APP_NAME=\"${APP_NAME}\"; source \"${LIB_DIR}/common.sh\"; worktree_delete_branch \"$branch\"'"
 }
 
 select_project_menu() {
@@ -301,7 +301,11 @@ worktree_menu() {
 
   case "$choice" in
     *Open*) open_worktree_menu ;;
-    *Add*) omarchy-launch-floating-terminal-with-presentation "${SCRIPT_DIR}/omarchy-rails-worktree-create" ;;
+    *Add*)
+      local project_dir
+      project_dir=$(pwd)
+      omarchy-launch-floating-terminal-with-presentation "bash -c 'set -euo pipefail; cd \"${project_dir}\"; source \"${LIB_DIR}/common.sh\"; worktree_create_branch'"
+      ;;
     *Delete*) delete_worktree_menu ;;
     *) back_to select_project_menu ;;
   esac
@@ -351,8 +355,10 @@ delete_worktree_menu() {
     return
   fi
 
-  # Launch deletion script in floating terminal with presentation
-  omarchy-launch-floating-terminal-with-presentation "$SCRIPT_DIR/omarchy-rails-worktree-delete" "$worktree"
+  # Launch deletion function in floating terminal with presentation
+  local project_dir
+  project_dir=$(pwd)
+  omarchy-launch-floating-terminal-with-presentation "bash -c 'set -euo pipefail; cd \"${project_dir}\"; export APP_NAME=\"${APP_NAME}\"; source \"${LIB_DIR}/common.sh\"; worktree_delete_branch \"$worktree\"'"
 }
 
 start_or_connect_session() {

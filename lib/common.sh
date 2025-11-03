@@ -3,12 +3,30 @@
 # Common functions for omarchy-rails-worktree
 #
 
-# Constants
-readonly WORKTREE_CONFIG_DIR="${HOME}/.config/omarchy-rails-worktree"
-readonly WORKTREE_PROJECTS_FILE="${WORKTREE_CONFIG_DIR}/projects"
-readonly WORKTREE_LOCK_DIR="${WORKTREE_CONFIG_DIR}/locks"
-readonly WORKTREE_RECENT_FILE="${WORKTREE_CONFIG_DIR}/recent_worktrees"
-readonly MAX_RECENT_ITEMS=3
+# Prevent multiple sourcing
+if [[ -n "${OMARCHY_WORKTREE_COMMON_LOADED:-}" ]]; then
+  return 0
+fi
+readonly OMARCHY_WORKTREE_COMMON_LOADED=1
+
+# Get the directory containing this script
+COMMON_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Constants (only set if not already defined)
+if [[ -z "${WORKTREE_CONFIG_DIR:-}" ]]; then
+  readonly WORKTREE_CONFIG_DIR="${HOME}/.config/omarchy-rails-worktree"
+  readonly WORKTREE_PROJECTS_FILE="${WORKTREE_CONFIG_DIR}/projects"
+  readonly WORKTREE_LOCK_DIR="${WORKTREE_CONFIG_DIR}/locks"
+  readonly WORKTREE_RECENT_FILE="${WORKTREE_CONFIG_DIR}/recent_worktrees"
+  readonly MAX_RECENT_ITEMS=3
+  readonly MODULES_DIR="${COMMON_LIB_DIR}/../modules"
+fi
+
+# Source validation functions if not already loaded
+if [[ -z "$(type -t validate_branch_name 2>/dev/null)" ]]; then
+  # shellcheck source=lib/validation.sh
+  source "${COMMON_LIB_DIR}/validation.sh"
+fi
 
 # Error handling utilities
 die() {
@@ -340,4 +358,211 @@ parse_recent_selection() {
   # Return project_dir and branch on separate lines
   echo "$project_dir"
   echo "$branch"
+}
+
+# Command functions (formerly standalone scripts)
+
+# Initialize and register a new project for worktree management
+worktree_init_project() {
+  # Check dependencies
+  check_dependencies gum git
+
+  # Get project directory from argument or prompt
+  local PROJECT_DIRECTORY
+  if [[ -z "${1:-}" ]]; then
+    echo -e "\e[32mEnter the git project directory path:\e[0m"
+    PROJECT_DIRECTORY=$(gum input --placeholder="Project directory" --header="") || exit 1
+  else
+    PROJECT_DIRECTORY="$1"
+  fi
+
+  if [[ -z "$PROJECT_DIRECTORY" ]]; then
+    die "Project directory cannot be empty"
+  fi
+
+  # Validate and normalize the directory path
+  PROJECT_DIRECTORY=$(validate_directory "$PROJECT_DIRECTORY")
+
+  # Validate that it's a git repository
+  require_directory_exists "$PROJECT_DIRECTORY"
+  cd "$PROJECT_DIRECTORY" || die "Failed to cd to $PROJECT_DIRECTORY"
+  validate_git_repository "$PROJECT_DIRECTORY"
+
+  # Add to projects list
+  add_project_to_config "$PROJECT_DIRECTORY"
+
+  # Ensure .worktrees/ is in global gitignore
+  ensure_worktrees_globally_ignored
+
+  info "✓ Project registered: $PROJECT_DIRECTORY"
+  info "You can now use 'omarchy-rails-worktree' to manage worktrees for this project"
+}
+
+# Create a new worktree for a branch
+worktree_create_branch() {
+  # Check dependencies
+  check_dependencies gum git
+
+  # Ensure we're in a git repository
+  require_git_repository
+
+  # Get branch name from argument or prompt
+  local BRANCH_NAME
+  if [[ -z "${1:-}" ]]; then
+    echo -e "\e[32mProvide a new or existing branch name\n\e[0m"
+    BRANCH_NAME=$(gum input --placeholder="Branch name" --header="") || exit 1
+  else
+    BRANCH_NAME="$1"
+  fi
+
+  if [[ -z "$BRANCH_NAME" ]]; then
+    die "Branch name cannot be empty"
+  fi
+
+  # Validate branch name
+  validate_branch_name "$BRANCH_NAME"
+
+  # Check if worktree already exists
+  if worktree_exists "$BRANCH_NAME"; then
+    die "Worktree for branch '$BRANCH_NAME' already exists!"
+  fi
+
+  # Set up directories
+  local PROJECT_DIR WORKTREE_BASE_DIR WORKTREE_DIR
+  PROJECT_DIR="$(pwd)"
+  WORKTREE_BASE_DIR="${PROJECT_DIR}/.worktrees"
+  WORKTREE_DIR="${WORKTREE_BASE_DIR}/${BRANCH_NAME}"
+
+  # Validate that worktree directory doesn't already exist
+  if [[ -e "$WORKTREE_DIR" ]]; then
+    die "Directory already exists: $WORKTREE_DIR"
+  fi
+
+  # Create git worktree
+  info "🌳 Creating git worktree..."
+  if git worktree add "$WORKTREE_DIR" "$BRANCH_NAME" 2>/dev/null; then
+    info "Using existing branch: $BRANCH_NAME"
+  else
+    # If branch doesn't exist, create it from HEAD
+    info "Creating new branch: $BRANCH_NAME"
+    git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME" || die "Failed to create worktree"
+  fi
+
+  # Verify worktree was created
+  if ! git worktree list | grep -qF "$WORKTREE_DIR"; then
+    die "Failed to create worktree"
+  fi
+
+  # Run module-specific setup scripts
+  info "🔧 Running setup modules..."
+  if [[ -d "$MODULES_DIR" ]]; then
+    for module_setup in "$MODULES_DIR"/*/setup; do
+      if [[ -x "$module_setup" ]]; then
+        "$module_setup" "$WORKTREE_DIR" "$BRANCH_NAME" "$PROJECT_DIR"
+      fi
+    done
+  fi
+
+  info ""
+  info "✓ Worktree created successfully!"
+  info "  Branch: $BRANCH_NAME"
+  info "  Path: $WORKTREE_DIR"
+
+  # Record this worktree in recent access list
+  record_worktree_access "$PROJECT_DIR" "$BRANCH_NAME"
+}
+
+# Delete a worktree and its associated session
+worktree_delete_branch() {
+  # Check dependencies
+  check_dependencies gum git
+
+  # Ensure we're in a git repository
+  require_git_repository
+
+  # Get branch name
+  if [[ -z "${1:-}" ]]; then
+    die "Branch name required"
+  fi
+
+  local BRANCH_NAME="$1"
+
+  # Validate branch name
+  validate_branch_name "$BRANCH_NAME"
+
+  # Get worktree directory from git
+  local ACTUAL_WORKTREE_DIR
+  ACTUAL_WORKTREE_DIR=$(get_worktree_dir "$BRANCH_NAME")
+
+  if [[ -z "$ACTUAL_WORKTREE_DIR" ]]; then
+    die "Branch '$BRANCH_NAME' is not a valid worktree"
+  fi
+
+  # Validate worktree directory (must be in .worktrees/)
+  validate_worktree_directory "$ACTUAL_WORKTREE_DIR"
+
+  # Get project directory for removing from recent items
+  local PROJECT_DIR
+  PROJECT_DIR=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+  # Show confirmation prompt
+  warn "You are about to delete:"
+  echo -e "  Branch: \e[1m$BRANCH_NAME\e[0m"
+  echo -e "  Path: \e[1m$ACTUAL_WORKTREE_DIR\e[0m"
+  echo ""
+
+  if ! gum confirm "Delete this worktree?"; then
+    info "Cancelled"
+    exit 0
+  fi
+
+  # Get session name (using APP_NAME from parent environment)
+  local SESSION_NAME
+  if [[ -z "${APP_NAME:-}" ]]; then
+    # Fallback: derive from current directory
+    APP_NAME=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
+  fi
+
+  SESSION_NAME=$(get_session_name "$APP_NAME" "$BRANCH_NAME")
+
+  # Clean up zellij session
+  echo ""
+  info "🧹 Cleaning up zellij session..."
+
+  kill_zellij_session "$SESSION_NAME"
+
+  # Remove git worktree
+  echo ""
+  info "🌳 Removing git worktree..."
+
+  if git worktree remove "$ACTUAL_WORKTREE_DIR" --force 2>&1; then
+    info "✓ Worktree deleted successfully"
+
+    # Remove from recent items
+    remove_worktree_from_recent "$PROJECT_DIR" "$BRANCH_NAME"
+
+    notify-send "Worktree deleted" "Branch: $BRANCH_NAME" 2>/dev/null || true
+    exit 0
+  fi
+
+  # Fallback: try prune and manual removal
+  warn "Git worktree remove failed, trying manual cleanup..."
+
+  git worktree prune 2>/dev/null || true
+
+  if [[ -d "$ACTUAL_WORKTREE_DIR" ]]; then
+    rm -rf "$ACTUAL_WORKTREE_DIR" 2>/dev/null || true
+
+    if [[ ! -d "$ACTUAL_WORKTREE_DIR" ]]; then
+      info "✓ Worktree deleted (manual cleanup)"
+
+      # Remove from recent items
+      remove_worktree_from_recent "$PROJECT_DIR" "$BRANCH_NAME"
+
+      notify-send "Worktree deleted" "Branch: $BRANCH_NAME (manual cleanup)" 2>/dev/null || true
+      exit 0
+    fi
+  fi
+
+  die "Failed to delete worktree: $ACTUAL_WORKTREE_DIR"
 }

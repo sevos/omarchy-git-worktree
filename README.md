@@ -55,13 +55,13 @@ This tool is part of the Omarchy ecosystem and requires these custom tools:
 ```
 omarchy-rails-worktree/
 ├── bin/
-│   ├── omarchy-rails-worktree           # Main menu interface
-│   ├── omarchy-rails-worktree-init      # Register new Rails projects
-│   ├── omarchy-rails-worktree-create    # Create new worktrees
-│   └── omarchy-rails-worktree-delete    # Delete worktrees
+│   └── omarchy-rails-worktree           # Main menu interface
 ├── lib/
-│   ├── common.sh                        # Shared utility functions
+│   ├── common.sh                        # Shared utility functions and command implementations
 │   └── validation.sh                    # Input validation functions
+├── modules/
+│   ├── rails/                           # Rails-specific setup module
+│   └── claude/                          # Claude Code integration module
 ├── share/
 │   └── zellij-layout.kdl               # Zellij layout configuration
 └── README.md
@@ -69,93 +69,91 @@ omarchy-rails-worktree/
 
 ## Usage
 
-### Registering a Rails Project
+All operations are performed through the interactive menu interface. The tool is designed for menu-only workflow.
 
-Before creating worktrees, register your Rails project:
-
-```bash
-omarchy-rails-worktree-init /path/to/your/rails/project
-```
-
-Or run without arguments for an interactive prompt:
-
-```bash
-omarchy-rails-worktree-init
-```
-
-The tool will validate that the directory:
-- Exists and is accessible
-- Is a Git repository
-- Contains Rails project files (Gemfile, app/, config/)
-
-### Using the Main Menu
-
-Launch the interactive menu:
+### Launch the Interactive Menu
 
 ```bash
 omarchy-rails-worktree
 ```
 
-Navigate through the menu to:
-1. **Open project** - Select a registered Rails project
-2. **Add project** - Register a new Rails project
+### Main Menu Options
 
-After selecting a project:
-- **Open worktree** - Open an existing worktree in Zellij
-- **Add worktree** - Create a new worktree
+The main menu provides access to:
+- **Browse all projects** - View and open registered Rails projects
+- **Add worktree** - Create a new worktree in a registered project
 - **Delete worktree** - Remove an existing worktree
+- **Add project** - Register a new Rails project
+
+Recent worktrees are shown at the top for quick access.
+
+### Registering a Rails Project
+
+1. Launch `omarchy-rails-worktree`
+2. Select **"Add project"**
+3. Enter the path to your Rails project (or browse interactively)
+
+The tool will validate that the directory:
+- Exists and is accessible
+- Is a Git repository
+- Adds `.worktrees/` to your global gitignore
 
 ### Creating a Worktree
 
-From your Rails project directory:
-
-```bash
-omarchy-rails-worktree-create feature-branch
-```
-
-Or run without arguments for an interactive prompt.
+1. From the main menu, select **"Add worktree"**
+2. Choose the Rails project
+3. Enter a branch name (new or existing)
 
 This will:
-1. Create a Git worktree in `./.worktrees/feature-branch/`
+1. Create a Git worktree in `./.worktrees/<branch>/`
 2. Allocate a unique port (starting from 3010, incrementing by 10)
 3. Copy or create `.env` file with the allocated port
-4. Link shared resources (master.key, Claude settings)
-5. Run `bin/setup` and optionally `bin/ci` for validation
+4. Link shared resources (master.key, Claude settings via modules)
+5. Run module setup scripts (Rails: `bin/setup`, Claude: link settings)
+6. Add to recent worktrees for quick access
 
-**Example:**
-```bash
-cd ~/projects/my-rails-app
-omarchy-rails-worktree-create fix-auth-bug
-# Creates worktree at ~/projects/my-rails-app/.worktrees/fix-auth-bug
-# Allocates port 3010 (or next available)
+**Example result:**
+```
+Creates worktree at ~/projects/my-rails-app/.worktrees/feature-auth
+Allocates port 3010 (or next available)
+Links master.key and Claude settings
+Runs bin/setup and bin/ci (if available)
 ```
 
 ### Deleting a Worktree
 
-```bash
-omarchy-rails-worktree-delete feature-branch
-```
+1. From the main menu, select **"Delete worktree"**
+2. Choose the project and worktree from the unified list
+3. Confirm deletion
 
 This will:
 1. Validate the worktree exists and is in the `.worktrees/` directory
 2. Show confirmation prompt
 3. Kill and delete the associated Zellij session
 4. Remove the Git worktree and directory
+5. Remove from recent worktrees
 
 **Safety:** Only worktrees in the `.worktrees/` subdirectory can be deleted to prevent accidental deletion of the main repository.
 
 ### Opening a Worktree
 
-Use the main menu to:
-1. Select "Open project"
+Two ways to open a worktree:
+
+**Quick access (recent worktrees):**
+1. Launch `omarchy-rails-worktree`
+2. Select from the recent worktrees shown at the top (⚡ icon)
+
+**Browse all worktrees:**
+1. Select **"Browse all projects"**
 2. Choose your Rails project
-3. Select "Open worktree"
+3. Select **"Open worktree"**
 4. Choose the branch
 
 The tool will:
 - Change to the worktree directory
 - Create or attach to the Zellij session named `<app>-<branch>`
 - Launch the session with the configured layout
+- Track as a recent worktree for future quick access
 
 ## How It Works
 
@@ -216,7 +214,8 @@ The tool intelligently:
 
 Configuration is stored in `~/.config/omarchy-rails-worktree/`:
 - `projects` - List of registered Rails projects (one path per line)
-- `locks/` - Port allocation lock files
+- `recent_worktrees` - Recently accessed worktrees for quick access (max 3)
+- `locks/` - Port allocation lock files for concurrent worktree creation
 
 ### Zellij Layout
 
