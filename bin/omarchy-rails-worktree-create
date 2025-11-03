@@ -54,7 +54,8 @@ if worktree_exists "$BRANCH_NAME"; then
 fi
 
 # Set up directories
-WORKTREE_BASE_DIR="$(pwd)/trees"
+PROJECT_DIR="$(pwd)"
+WORKTREE_BASE_DIR="${PROJECT_DIR}/trees"
 WORKTREE_DIR="${WORKTREE_BASE_DIR}/${BRANCH_NAME}"
 
 # Validate that worktree directory doesn't already exist
@@ -143,3 +144,6 @@ info "✓ Worktree created successfully!"
 info "  Branch: $BRANCH_NAME"
 info "  Path: $WORKTREE_DIR"
 info "  Port: $SERVER_PORT"
+
+# Record this worktree in recent access list
+record_worktree_access "$PROJECT_DIR" "$BRANCH_NAME"

@@ -41,6 +41,9 @@ fi
 # Validate worktree directory (must be in trees/)
 validate_worktree_directory "$ACTUAL_WORKTREE_DIR"
 
+# Get project directory for removing from recent items
+PROJECT_DIR=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
 # Show confirmation prompt
 warn "You are about to delete:"
 echo -e "  Branch: \e[1m$BRANCH_NAME\e[0m"
@@ -72,6 +75,10 @@ info "🌳 Removing git worktree..."
 
 if git worktree remove "$ACTUAL_WORKTREE_DIR" --force 2>&1; then
   info "✓ Worktree deleted successfully"
+
+  # Remove from recent items
+  remove_worktree_from_recent "$PROJECT_DIR" "$BRANCH_NAME"
+
   notify-send "Worktree deleted" "Branch: $BRANCH_NAME" 2>/dev/null || true
   exit 0
 fi
@@ -86,6 +93,10 @@ if [[ -d "$ACTUAL_WORKTREE_DIR" ]]; then
 
   if [[ ! -d "$ACTUAL_WORKTREE_DIR" ]]; then
     info "✓ Worktree deleted (manual cleanup)"
+
+    # Remove from recent items
+    remove_worktree_from_recent "$PROJECT_DIR" "$BRANCH_NAME"
+
     notify-send "Worktree deleted" "Branch: $BRANCH_NAME (manual cleanup)" 2>/dev/null || true
     exit 0
   fi

@@ -291,6 +291,33 @@ record_worktree_access() {
   return 0
 }
 
+remove_worktree_from_recent() {
+  local project_dir="$1"
+  local branch="$2"
+
+  if [[ -z "$project_dir" ]] || [[ -z "$branch" ]]; then
+    return 1
+  fi
+
+  ensure_config_dir
+
+  # If no recent file exists, nothing to remove
+  if [[ ! -f "$WORKTREE_RECENT_FILE" ]]; then
+    return 0
+  fi
+
+  # Create temp file for atomic update
+  local temp_file="${WORKTREE_RECENT_FILE}.tmp.$$"
+
+  # Remove entries for this exact project+branch combination
+  grep -v "|${project_dir}|${branch}$" "$WORKTREE_RECENT_FILE" > "$temp_file" 2>/dev/null || true
+
+  # Atomic replace
+  mv "$temp_file" "$WORKTREE_RECENT_FILE"
+
+  return 0
+}
+
 calculate_time_ago() {
   local timestamp="$1"
   local now

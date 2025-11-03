@@ -72,14 +72,17 @@ open_in_editor() {
 
 # Menu functions
 show_main_menu() {
-  local recent_items
-  recent_items=$(generate_recent_items)
+  local recent_items_full
+  recent_items_full=$(generate_recent_items)
 
   local options=""
 
   # Add recent items section if available
-  if [[ -n "$recent_items" ]]; then
-    options="${recent_items}\n─────────────────────\n"
+  if [[ -n "$recent_items_full" ]]; then
+    # Strip metadata (everything after first |) for display only
+    local recent_items_display
+    recent_items_display=$(echo -e "$recent_items_full" | sed 's/|.*$//')
+    options="${recent_items_display}\n─────────────────────\n"
   fi
 
   # Add standard menu options
@@ -92,8 +95,16 @@ show_main_menu() {
   if [[ "$selection" == "CNCLD" || -z "$selection" ]]; then
     return 1  # Signal to exit
   elif [[ "$selection" =~ ^⚡ ]]; then
-    # Recent item selected - open directly
-    open_recent_worktree "$selection"
+    # Recent item selected - need to find matching full line with metadata
+    local matched_line
+    matched_line=$(echo -e "$recent_items_full" | grep "^${selection}|")
+
+    if [[ -n "$matched_line" ]]; then
+      open_recent_worktree "$matched_line"
+    else
+      notify-send "Error" "Failed to find matching recent item"
+      return 0  # Continue showing menu
+    fi
   else
     # Standard menu navigation
     go_to_menu "$selection"
@@ -143,6 +154,7 @@ open_recent_worktree() {
   # Change to worktree and start session
   cd "$worktree_dir" || die "Failed to change to worktree directory: $worktree_dir"
   start_or_connect_session "$branch"
+  exit 0
 }
 
 go_to_menu() {
@@ -315,6 +327,7 @@ open_worktree_menu() {
 
     cd "$worktree_dir" || die "Failed to change to worktree directory: $worktree_dir"
     start_or_connect_session "$worktree"
+    exit 0
   fi
 }
 
