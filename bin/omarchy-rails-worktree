@@ -13,7 +13,7 @@ LIB_DIR="${SCRIPT_DIR}/../lib"
 source "${LIB_DIR}/common.sh"
 
 # Check dependencies
-check_dependencies omarchy-launch-walker omarchy-launch-floating-terminal-with-presentation omarchy-launch-terminal git
+check_dependencies omarchy-launch-walker omarchy-launch-floating-terminal-with-presentation xdg-terminal-exec git
 
 # Export zellij layout file
 export ZELLIJ_LAYOUT_FILE
@@ -58,7 +58,7 @@ menu() {
 }
 
 terminal() {
-  alacritty --class=Omarchy -e "$@"
+  xdg-terminal-exec --app-id=com.omarchy.Omarchy "$@"
 }
 
 present_terminal() {
@@ -374,14 +374,14 @@ start_or_connect_session() {
 
   if session_is_alive "$session_name"; then
     # Session is alive, attach to it
-    omarchy-launch-terminal -e bash -c "zellij attach \"$session_name\""
+    terminal -e bash -c "zellij attach \"$session_name\""
   elif session_exists "$session_name"; then
     # Session exists but is dead, recreate it
     zellij delete-session "$session_name" 2>/dev/null || true
-    omarchy-launch-terminal -e bash -c "cd \"$project_dir\" && zellij --session \"$session_name\" --new-session-with-layout \"$ZELLIJ_LAYOUT_FILE\""
+    terminal -e bash -c "cd \"$project_dir\" && zellij --session \"$session_name\" --new-session-with-layout \"$ZELLIJ_LAYOUT_FILE\""
   else
     # Fresh start
-    omarchy-launch-terminal -e bash -c "cd \"$project_dir\" && zellij --session \"$session_name\" --new-session-with-layout \"$ZELLIJ_LAYOUT_FILE\""
+    terminal -e bash -c "cd \"$project_dir\" && zellij --session \"$session_name\" --new-session-with-layout \"$ZELLIJ_LAYOUT_FILE\""
   fi
 }
 
