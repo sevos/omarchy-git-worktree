@@ -120,7 +120,7 @@ validate_rails_project() {
   fi
 }
 
-# Validate worktree directory (must be in trees/ subdirectory)
+# Validate worktree directory (must be in .worktrees/ subdirectory)
 validate_worktree_directory() {
   local worktree_dir="$1"
 
@@ -128,9 +128,9 @@ validate_worktree_directory() {
     die "Worktree directory cannot be empty"
   fi
 
-  # Safety check: Must be in trees/ directory
-  if [[ "$worktree_dir" != */trees/* ]]; then
-    die "Worktree must be in 'trees/' directory. Got: $worktree_dir"
+  # Safety check: Must be in .worktrees/ directory
+  if [[ "$worktree_dir" != */.worktrees/* ]]; then
+    die "Worktree must be in '.worktrees/' directory. Got: $worktree_dir"
   fi
 }
 

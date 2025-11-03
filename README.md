@@ -116,7 +116,7 @@ omarchy-rails-worktree-create feature-branch
 Or run without arguments for an interactive prompt.
 
 This will:
-1. Create a Git worktree in `./trees/feature-branch/`
+1. Create a Git worktree in `./.worktrees/feature-branch/`
 2. Allocate a unique port (starting from 3010, incrementing by 10)
 3. Copy or create `.env` file with the allocated port
 4. Link shared resources (master.key, Claude settings)
@@ -126,7 +126,7 @@ This will:
 ```bash
 cd ~/projects/my-rails-app
 omarchy-rails-worktree-create fix-auth-bug
-# Creates worktree at ~/projects/my-rails-app/trees/fix-auth-bug
+# Creates worktree at ~/projects/my-rails-app/.worktrees/fix-auth-bug
 # Allocates port 3010 (or next available)
 ```
 
@@ -137,12 +137,12 @@ omarchy-rails-worktree-delete feature-branch
 ```
 
 This will:
-1. Validate the worktree exists and is in the `trees/` directory
+1. Validate the worktree exists and is in the `.worktrees/` directory
 2. Show confirmation prompt
 3. Kill and delete the associated Zellij session
 4. Remove the Git worktree and directory
 
-**Safety:** Only worktrees in the `trees/` subdirectory can be deleted to prevent accidental deletion of the main repository.
+**Safety:** Only worktrees in the `.worktrees/` subdirectory can be deleted to prevent accidental deletion of the main repository.
 
 ### Opening a Worktree
 
@@ -180,7 +180,7 @@ For a Rails project at `/home/user/myapp`:
 
 ```
 /home/user/myapp/                  # Main repository
-├── trees/                         # Worktrees directory
+├── .worktrees/                         # Worktrees directory
 │   ├── feature-a/                # Worktree for feature-a branch
 │   │   ├── .env                  # Environment with PORT=3010
 │   │   └── config/
@@ -240,7 +240,7 @@ All scripts use:
 
 ### Safety Features
 
-- **Worktree deletion** is restricted to the `trees/` subdirectory only
+- **Worktree deletion** is restricted to the `.worktrees/` subdirectory only
 - **Port locks** prevent race conditions during concurrent worktree creation
 - **Branch name validation** prevents invalid or malicious input
 - **Path validation** protects against directory traversal attacks
@@ -263,7 +263,7 @@ If you see port conflicts:
 Check that:
 1. You're in a Git repository
 2. The branch name is valid (no spaces or special characters)
-3. The `trees/` directory is writable
+3. The `.worktrees/` directory is writable
 4. `bin/setup` exists in your Rails project
 
 ### Zellij session issues

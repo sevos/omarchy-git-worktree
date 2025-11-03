@@ -262,8 +262,8 @@ delete_worktree_unified_menu() {
   worktree_dir=$(get_worktree_dir "$branch")
 
   # Safety check
-  if [[ "$worktree_dir" != *"/trees/"* ]]; then
-    notify-send "Cannot delete worktree" "Only worktrees in trees/ directory can be deleted"
+  if [[ "$worktree_dir" != *"/.worktrees/"* ]]; then
+    notify-send "Cannot delete worktree" "Only worktrees in .worktrees/ directory can be deleted"
     back_to show_main_menu
     return
   fi
@@ -344,9 +344,9 @@ delete_worktree_menu() {
   local worktree_dir
   worktree_dir=$(get_worktree_dir "$worktree")
 
-  # Safety check: Only allow deletion of worktrees in trees/ directory
-  if [[ "$worktree_dir" != *"/trees/"* ]]; then
-    notify-send "Cannot delete worktree" "Only worktrees in trees/ directory can be deleted"
+  # Safety check: Only allow deletion of worktrees in .worktrees/ directory
+  if [[ "$worktree_dir" != *"/.worktrees/"* ]]; then
+    notify-send "Cannot delete worktree" "Only worktrees in .worktrees/ directory can be deleted"
     back_to worktree_menu
     return
   fi
@@ -364,9 +364,9 @@ start_or_connect_session() {
 
   # Find the main project directory (go up from worktree dir if needed)
   local main_project_dir="$project_dir"
-  if [[ "$project_dir" == *"/trees/"* ]]; then
+  if [[ "$project_dir" == *"/.worktrees/"* ]]; then
     # We're in a worktree, find the main project directory
-    main_project_dir=$(echo "$project_dir" | sed 's|/trees/.*||')
+    main_project_dir=$(echo "$project_dir" | sed 's|/.worktrees/.*||')
   fi
 
   # Record this worktree access

@@ -41,5 +41,8 @@ validate_git_repository "$PROJECT_DIRECTORY"
 # Add to projects list
 add_project_to_config "$PROJECT_DIRECTORY"
 
+# Ensure .worktrees/ is in global gitignore
+ensure_worktrees_globally_ignored
+
 info "✓ Project registered: $PROJECT_DIRECTORY"
 info "You can now use 'omarchy-rails-worktree' to manage worktrees for this project"

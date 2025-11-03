@@ -88,6 +88,38 @@ add_project_to_config() {
   echo "$project_dir" >> "$WORKTREE_PROJECTS_FILE"
 }
 
+ensure_worktrees_globally_ignored() {
+  local gitignore_path
+
+  # Check if global gitignore is already configured
+  gitignore_path=$(git config --global core.excludesfile)
+
+  if [[ -z "$gitignore_path" ]]; then
+    # Not configured, use standard location
+    gitignore_path="$HOME/.gitignore_global"
+    info "Configuring global gitignore at: $gitignore_path"
+    git config --global core.excludesfile "$gitignore_path"
+  else
+    # Expand tilde if present
+    gitignore_path="${gitignore_path/#\~/$HOME}"
+  fi
+
+  # Create parent directory if needed
+  local parent_dir
+  parent_dir=$(dirname "$gitignore_path")
+  if [[ ! -d "$parent_dir" ]]; then
+    mkdir -p "$parent_dir"
+  fi
+
+  # Add .worktrees/ pattern if not already present
+  if [[ -f "$gitignore_path" ]] && grep -qxF ".worktrees/" "$gitignore_path"; then
+    info ".worktrees/ already in global gitignore"
+  else
+    echo ".worktrees/" >> "$gitignore_path"
+    info "Added .worktrees/ to global gitignore: $gitignore_path"
+  fi
+}
+
 get_projects_list() {
   if [[ ! -f "$WORKTREE_PROJECTS_FILE" ]]; then
     return 0

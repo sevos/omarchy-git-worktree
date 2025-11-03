@@ -43,7 +43,7 @@ fi
 
 # Set up directories
 PROJECT_DIR="$(pwd)"
-WORKTREE_BASE_DIR="${PROJECT_DIR}/trees"
+WORKTREE_BASE_DIR="${PROJECT_DIR}/.worktrees"
 WORKTREE_DIR="${WORKTREE_BASE_DIR}/${BRANCH_NAME}"
 
 # Validate that worktree directory doesn't already exist
