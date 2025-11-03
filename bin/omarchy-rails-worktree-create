@@ -1,127 +1,145 @@
-#!/bin/bash
-
-worktree_list() {
-  git worktree list --porcelain | grep branch | sed 's/branch refs\/heads\///g'
-}
-
+#!/usr/bin/env bash
+#
 # omarchy-rails-worktree-create: Create a new worktree in the current Rails project
 # Usage: omarchy-rails-worktree-create <branch>
+#
 
-if [ -z "$1" ]; then
+set -euo pipefail
+
+# Get script directory and load libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/../lib"
+
+# shellcheck source=lib/common.sh
+source "${LIB_DIR}/common.sh"
+# shellcheck source=lib/validation.sh
+source "${LIB_DIR}/validation.sh"
+
+# Check dependencies
+check_dependencies gum git
+
+# Ensure we're in a git repository
+require_git_repository
+
+# Cleanup function for port locks
+PORT_OFFSET=""
+cleanup() {
+  if [[ -n "${PORT_OFFSET}" ]]; then
+    release_port_lock "$PORT_OFFSET"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+# Clean up stale locks before starting
+cleanup_stale_locks
+
+# Get branch name from argument or prompt
+if [[ -z "${1:-}" ]]; then
   echo -e "\e[32mProvide a new or existing branch name\n\e[0m"
-  BRANCH_NAME=$(gum input --placeholder="Branch name" --header="")
+  BRANCH_NAME=$(gum input --placeholder="Branch name" --header="") || exit 1
 else
   BRANCH_NAME="$1"
 fi
 
-
-if [ -z "$BRANCH_NAME" ]; then
-  exit 1
+if [[ -z "$BRANCH_NAME" ]]; then
+  die "Branch name cannot be empty"
 fi
 
-WORKTREE_BASE_DIR=$(pwd)/trees
+# Validate branch name
+validate_branch_name "$BRANCH_NAME"
 
-if [[ ! -z "$(worktree_list | grep -E "^$BRANCH_NAME$")" ]]; then
-  echo -e "Worktree for this branch already exists!"
-  exit 1
+# Check if worktree already exists
+if worktree_exists "$BRANCH_NAME"; then
+  die "Worktree for branch '$BRANCH_NAME' already exists!"
 fi
 
-# Calculate port offset if not provided
-if [ -z "$PORT_OFFSET" ]; then
-  # Collect all currently used port offsets
-  declare -a USED_OFFSETS
+# Set up directories
+WORKTREE_BASE_DIR="$(pwd)/trees"
+WORKTREE_DIR="${WORKTREE_BASE_DIR}/${BRANCH_NAME}"
 
-  if [ -d "$WORKTREE_BASE_DIR" ]; then
-    # Get all worktrees and their ports
-    while IFS= read -r worktree_dir; do
-      if [ -f "$worktree_dir/.env" ]; then
-        PORT=$(grep "^PORT=" "$worktree_dir/.env" 2>/dev/null | cut -d= -f2)
-        if [ -n "$PORT" ]; then
-          # Calculate offset from port (PORT = 3000 + OFFSET * 10)
-          OFFSET=$(((PORT - SERVER_BASE_PORT) / 10))
-          USED_OFFSETS+=("$OFFSET")
-        fi
-      fi
-    done < <(find "$WORKTREE_BASE_DIR" -mindepth 1 -maxdepth 2 -type d)
-  fi
-
-  # Find smallest available offset starting from 1
-  PORT_OFFSET=1
-  while true; do
-    # Check if this offset is already used
-    OFFSET_IN_USE=false
-    for used_offset in "${USED_OFFSETS[@]}"; do
-      if [ "$used_offset" = "$PORT_OFFSET" ]; then
-        OFFSET_IN_USE=true
-        break
-      fi
-    done
-
-    # If not in use, we found our offset
-    if [ "$OFFSET_IN_USE" = false ]; then
-      break
-    fi
-
-    PORT_OFFSET=$((PORT_OFFSET + 1))
-  done
+# Validate that worktree directory doesn't already exist
+if [[ -e "$WORKTREE_DIR" ]]; then
+  die "Directory already exists: $WORKTREE_DIR"
 fi
 
-# Calculate ports
-SERVER_BASE_PORT=3000
+# Allocate port with safe locking mechanism
+info "🔢 Allocating port..."
+PORT_OFFSET=$(safe_port_allocation "$WORKTREE_BASE_DIR")
 SERVER_PORT=$((SERVER_BASE_PORT + PORT_OFFSET * 10))
-WORKTREE_DIR="$WORKTREE_BASE_DIR/$BRANCH_NAME"
 
-echo "🌳 Creating git worktree..."
-git worktree add "$WORKTREE_DIR" "$BRANCH_NAME" 2>/dev/null || {
+info "Allocated port: $SERVER_PORT (offset: $PORT_OFFSET)"
+
+# Create git worktree
+info "🌳 Creating git worktree..."
+if git worktree add "$WORKTREE_DIR" "$BRANCH_NAME" 2>/dev/null; then
+  info "Using existing branch: $BRANCH_NAME"
+else
   # If branch doesn't exist, create it from HEAD
-  git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME"
-}
-
-if ! git worktree list | grep -q "$WORKTREE_DIR"; then
-  echo "Error: Failed to create worktree"
-  exit 1
+  info "Creating new branch: $BRANCH_NAME"
+  git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME" || die "Failed to create worktree"
 fi
 
-echo "📄 Setting up environment files..."
-if [ -f ".env" ]; then
+# Verify worktree was created
+if ! git worktree list | grep -qF "$WORKTREE_DIR"; then
+  die "Failed to create worktree"
+fi
+
+# Setup environment files
+info "📄 Setting up environment files..."
+if [[ -f ".env" ]]; then
   cp ".env" "$WORKTREE_DIR/.env"
-elif [ -f ".env.sample" ]; then
+  info "Copied .env file"
+elif [[ -f ".env.sample" ]]; then
   cp ".env.sample" "$WORKTREE_DIR/.env"
-  echo "⚠️  Warning: Copied .env.sample - you may need to configure API keys"
-fi
-
-# Link master.key
-echo "🔑 Linking master.key..."
-if [ -f "config/master.key" ]; then
-  MASTER_KEY_PATH="$(realpath config/master.key)"
-  ln -sf "$MASTER_KEY_PATH" "$WORKTREE_DIR/config/master.key"
+  warn "Copied .env.sample - you may need to configure API keys"
 else
-  echo "⚠️  Warning: config/master.key not found - Rails credentials won't work"
+  warn "No .env or .env.sample found - creating minimal .env"
+  touch "$WORKTREE_DIR/.env"
 fi
 
-# Link Claude settings
-echo "🔗 Linking Claude settings..."
-if [ -f ".claude/settings.local.json" ]; then
-  mkdir -p "$WORKTREE_DIR/.claude"
-  CLAUDE_SETTINGS_PATH="$(realpath .claude/settings.local.json)"
-  ln -sf "$CLAUDE_SETTINGS_PATH" "$WORKTREE_DIR/.claude/settings.local.json"
+# Add port to .env
+echo "PORT=${SERVER_PORT}" >> "$WORKTREE_DIR/.env"
+
+# Link shared resources
+info "🔗 Linking shared resources..."
+
+link_shared_resource \
+  "config/master.key" \
+  "$WORKTREE_DIR/config/master.key" \
+  "master.key"
+
+link_shared_resource \
+  ".claude/settings.local.json" \
+  "$WORKTREE_DIR/.claude/settings.local.json" \
+  "Claude settings"
+
+# Install dependencies and setup
+info "📦 Installing dependencies..."
+cd "$WORKTREE_DIR" || die "Failed to cd to worktree directory"
+
+if [[ ! -f "bin/setup" ]]; then
+  die "bin/setup not found in worktree"
+fi
+
+# Run setup (allow it to fail without exiting)
+if bin/setup --skip-server 2>&1; then
+  info "✓ Setup completed successfully"
 else
-  echo "ℹ️  Info: .claude/settings.local.json not found - skipping"
+  warn "Setup completed with warnings"
 fi
 
-# Setup server environment
-echo "PORT=$SERVER_PORT" >> "$WORKTREE_DIR/.env"
-
-echo "📦 Installing dependencies..."
-cd "$WORKTREE_DIR"
-
-if [ ! -f "bin/setup" ]; then
-  echo "Error: bin/setup not found in worktree"
-  exit 1
+# Run validation if bin/ci exists
+if [[ -f "bin/ci" ]]; then
+  info "🔍 Running validation..."
+  if bin/ci 2>&1; then
+    info "✓ Validation passed"
+  else
+    warn "Validation failed - please review before using this worktree"
+  fi
 fi
 
-bin/setup --skip-server
-if [ -f "bin/ci" ]; then
-  echo "🔍 Running validation..."
-  bin/ci
-fi
+info ""
+info "✓ Worktree created successfully!"
+info "  Branch: $BRANCH_NAME"
+info "  Path: $WORKTREE_DIR"
+info "  Port: $SERVER_PORT"

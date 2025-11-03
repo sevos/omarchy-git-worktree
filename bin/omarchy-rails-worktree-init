@@ -1,18 +1,43 @@
-#!/bin/bash
-
-# omarchy-rails-worktree-init: Track and initialize woktree workflow in a Rails project
+#!/usr/bin/env bash
+#
+# omarchy-rails-worktree-init: Track and initialize worktree workflow in a Rails project
 # Usage: omarchy-rails-worktree-init <project-directory>
+#
 
-if [ -z "$1" ]; then
-  echo -e "\e[32m\e[0m"
-  PROJECT_DIRECTORY=$(gum input --placeholder="Project directory" --header="")
+set -euo pipefail
+
+# Get script directory and load libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/../lib"
+
+# shellcheck source=lib/common.sh
+source "${LIB_DIR}/common.sh"
+# shellcheck source=lib/validation.sh
+source "${LIB_DIR}/validation.sh"
+
+# Check dependencies
+check_dependencies gum git
+
+# Get project directory from argument or prompt
+if [[ -z "${1:-}" ]]; then
+  echo -e "\e[32mEnter the Rails project directory path:\e[0m"
+  PROJECT_DIRECTORY=$(gum input --placeholder="Project directory" --header="") || exit 1
 else
   PROJECT_DIRECTORY="$1"
 fi
 
-if [ -z "$PROJECT_DIRECTORY" ]; then
-  exit 1
+if [[ -z "$PROJECT_DIRECTORY" ]]; then
+  die "Project directory cannot be empty"
 fi
 
-mkdir $HOME/.config/omarchy-rails-worktree/
-echo "$PROJECT_DIRECTORY" >> $HOME/.config/omarchy-rails-worktree/projects
+# Validate and normalize the directory path
+PROJECT_DIRECTORY=$(validate_directory "$PROJECT_DIRECTORY")
+
+# Validate that it's a Rails project
+validate_rails_project "$PROJECT_DIRECTORY"
+
+# Add to projects list
+add_project_to_config "$PROJECT_DIRECTORY"
+
+info "✓ Project registered: $PROJECT_DIRECTORY"
+info "You can now use 'omarchy-rails-worktree' to manage worktrees for this project"

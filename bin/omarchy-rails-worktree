@@ -1,8 +1,28 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# omarchy-rails-worktree: Main menu interface for managing Rails worktrees
+#
+
+set -euo pipefail
+
+# Get script directory and load libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/../lib"
+
+# shellcheck source=lib/common.sh
+source "${LIB_DIR}/common.sh"
+
+# Check dependencies
+check_dependencies omarchy-launch-walker omarchy-launch-floating-terminal-with-presentation omarchy-launch-terminal git
+
+# Export zellij layout file
+export ZELLIJ_LAYOUT_FILE
+ZELLIJ_LAYOUT_FILE=$(realpath "${SCRIPT_DIR}/../share/zellij-layout.kdl")
 
 # Set to true when going directly to a submenu, so we can exit directly
 BACK_TO_EXIT=false
 
+# UI helper functions
 back_to() {
   local parent_menu="$1"
 
@@ -18,10 +38,13 @@ back_to() {
 menu() {
   local prompt="$1"
   local options="$2"
-  local extra="$3"
-  local preselect="$4"
+  local extra="${3:-}"
+  local preselect="${4:-}"
 
-  read -r -a args <<<"$extra"
+  local args=()
+  if [[ -n "$extra" ]]; then
+    read -r -a args <<<"$extra"
+  fi
 
   if [[ -n "$preselect" ]]; then
     local index
@@ -39,7 +62,7 @@ terminal() {
 }
 
 present_terminal() {
-  omarchy-launch-floating-terminal-with-presentation $1
+  omarchy-launch-floating-terminal-with-presentation "$1"
 }
 
 open_in_editor() {
@@ -47,9 +70,7 @@ open_in_editor() {
   omarchy-launch-editor "$1"
 }
 
-## MAIN CODE 
-
-
+# Menu functions
 show_main_menu() {
   go_to_menu "$(menu "Rails Worktree" "Open project\nAdd project")"
 }
@@ -62,48 +83,65 @@ go_to_menu() {
 }
 
 select_project_menu() {
-  project_dir=$(menu "Open project" "$(cat $HOME/.config/omarchy-rails-worktree/projects)")
+  local projects
+  projects=$(get_projects_list)
+
+  if [[ -z "$projects" ]]; then
+    notify-send "No projects" "No projects registered. Use 'Add project' first."
+    back_to show_main_menu
+    return
+  fi
+
+  local project_dir
+  project_dir=$(menu "Open project" "$projects")
 
   if [[ "$project_dir" == "CNCLD" || -z "$project_dir" ]]; then
     back_to show_main_menu
   else
-    cd $project_dir
-    export APP_NAME=$(basename "$project_dir")
+    cd "$project_dir" || die "Failed to change to project directory: $project_dir"
+    export APP_NAME
+    APP_NAME=$(basename "$project_dir")
     worktree_menu
   fi
 }
 
-worktree_list() {
-  git worktree list --porcelain | grep -E "^branch" | sed 's/branch refs\/heads\///g'
-}
-
-get_worktree_dir() {
-  local branch=$1
-  git worktree list --porcelain | grep -B2 -E "^branch refs/heads/$branch" | head -n 1 | sed 's/^worktree //'
-}
-
 worktree_menu() {
-  case $(menu "$(basename $(pwd))" "Open worktree\nAdd worktree\nDelete worktree") in
+  local choice
+  choice=$(menu "$(basename "$(pwd)")" "Open worktree\nAdd worktree\nDelete worktree")
+
+  case "$choice" in
     *Open*) open_worktree_menu ;;
-    *Add*) omarchy-launch-floating-terminal-with-presentation $SCRIPT_DIR/omarchy-rails-worktree-create ;;
+    *Add*) omarchy-launch-floating-terminal-with-presentation "${SCRIPT_DIR}/omarchy-rails-worktree-create" ;;
     *Delete*) delete_worktree_menu ;;
     *) back_to select_project_menu ;;
   esac
 }
 
 open_worktree_menu() {
+  local worktree
   worktree=$(menu "Worktree branch" "$(worktree_list)")
+
   if [[ "$worktree" == "CNCLD" || -z "$worktree" ]]; then
     back_to worktree_menu
   elif [[ "$worktree" == "New worktree" ]]; then
     true
   else
-    cd $(get_worktree_dir $worktree)
-    start_or_connect_session $worktree
+    local worktree_dir
+    worktree_dir=$(get_worktree_dir "$worktree")
+
+    if [[ -z "$worktree_dir" ]]; then
+      notify-send "Error" "Failed to find worktree directory for: $worktree"
+      back_to worktree_menu
+      return
+    fi
+
+    cd "$worktree_dir" || die "Failed to change to worktree directory: $worktree_dir"
+    start_or_connect_session "$worktree"
   fi
 }
 
 delete_worktree_menu() {
+  local worktree
   worktree=$(menu "Delete worktree" "$(worktree_list)")
 
   if [[ "$worktree" == "CNCLD" || -z "$worktree" ]]; then
@@ -112,6 +150,7 @@ delete_worktree_menu() {
   fi
 
   # Get worktree directory
+  local worktree_dir
   worktree_dir=$(get_worktree_dir "$worktree")
 
   # Safety check: Only allow deletion of worktrees in trees/ directory
@@ -126,33 +165,27 @@ delete_worktree_menu() {
 }
 
 start_or_connect_session() {
-  BRANCH=$1
-  PROJECT_DIR=$(pwd)
-  session_name="$APP_NAME-$BRANCH" 
+  local branch="$1"
+  local project_dir
+  project_dir=$(pwd)
+  local session_name
+  session_name=$(get_session_name "$APP_NAME" "$branch")
 
-  zellij_session=$(zellij list-sessions -n | grep -E "^$session_name ")
-
-  if [[ ! -z "$zellij_session" ]]; then
-    # session exists, let's check if it's alive
-    if [[ -z "$(echo "$zellij_session" | grep "EXITED")" ]]; then
-      # session is alive, let's attach to it
-      omarchy-launch-terminal -e bash -c "zellij attach $session_name"
-    else
-      # session is dead, let's recreate it
-      zellij delete-session $session_name
-      omarchy-launch-terminal -e bash -c "cd $PROJECT_DIR && zellij --session $session_name --new-session-with-layout $ZELLIJ_LAYOUT_FILE"
-    fi
+  if session_is_alive "$session_name"; then
+    # Session is alive, attach to it
+    omarchy-launch-terminal -e bash -c "zellij attach \"$session_name\""
+  elif session_exists "$session_name"; then
+    # Session exists but is dead, recreate it
+    zellij delete-session "$session_name" 2>/dev/null || true
+    omarchy-launch-terminal -e bash -c "cd \"$project_dir\" && zellij --session \"$session_name\" --new-session-with-layout \"$ZELLIJ_LAYOUT_FILE\""
   else
     # Fresh start
-    omarchy-launch-terminal -e bash -c "cd $PROJECT_DIR && zellij --session $session_name --new-session-with-layout $ZELLIJ_LAYOUT_FILE"
+    omarchy-launch-terminal -e bash -c "cd \"$project_dir\" && zellij --session \"$session_name\" --new-session-with-layout \"$ZELLIJ_LAYOUT_FILE\""
   fi
 }
 
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export ZELLIJ_LAYOUT_FILE=$(realpath "${SCRIPT_DIR}/../share/zellij-layout.kdl")
-
-if [[ -n "$1" ]]; then
+# Main entry point
+if [[ -n "${1:-}" ]]; then
   BACK_TO_EXIT=true
   go_to_menu "$1"
 else
