@@ -72,14 +72,191 @@ open_in_editor() {
 
 # Menu functions
 show_main_menu() {
-  go_to_menu "$(menu "Rails Worktree" "Open project\nAdd project")"
+  local recent_items
+  recent_items=$(generate_recent_items)
+
+  local options=""
+
+  # Add recent items section if available
+  if [[ -n "$recent_items" ]]; then
+    options="${recent_items}\n─────────────────────\n"
+  fi
+
+  # Add standard menu options
+  options="${options}Browse all projects\nAdd worktree\nDelete worktree\nAdd project"
+
+  local selection
+  selection=$(menu "Rails Worktree" "$options")
+
+  # Handle selection
+  if [[ "$selection" == "CNCLD" || -z "$selection" ]]; then
+    exit 0
+  elif [[ "$selection" =~ ^⚡ ]]; then
+    # Recent item selected - open directly
+    open_recent_worktree "$selection"
+  else
+    # Standard menu navigation
+    go_to_menu "$selection"
+  fi
+}
+
+open_recent_worktree() {
+  local selection="$1"
+
+  # Parse the selection to extract project_dir and branch
+  local parsed
+  parsed=$(parse_recent_selection "$selection")
+
+  local project_dir branch
+  project_dir=$(echo "$parsed" | sed -n '1p')
+  branch=$(echo "$parsed" | sed -n '2p')
+
+  if [[ -z "$project_dir" ]] || [[ -z "$branch" ]]; then
+    notify-send "Error" "Failed to parse recent selection"
+    show_main_menu
+    return
+  fi
+
+  # Verify project still exists
+  if [[ ! -d "$project_dir" ]]; then
+    notify-send "Error" "Project directory no longer exists: $project_dir"
+    show_main_menu
+    return
+  fi
+
+  # Set up environment
+  cd "$project_dir" || die "Failed to change to project directory: $project_dir"
+  export APP_NAME
+  APP_NAME=$(basename "$project_dir")
+
+  # Get worktree directory
+  local worktree_dir
+  worktree_dir=$(get_worktree_dir "$branch")
+
+  if [[ -z "$worktree_dir" ]]; then
+    notify-send "Error" "Worktree no longer exists: $branch"
+    show_main_menu
+    return
+  fi
+
+  # Change to worktree and start session
+  cd "$worktree_dir" || die "Failed to change to worktree directory: $worktree_dir"
+  start_or_connect_session "$branch"
 }
 
 go_to_menu() {
   case "${1,,}" in
-  *open*) select_project_menu ;;
-  *add*) omarchy-launch-floating-terminal-with-presentation "omarchy-rails-worktree-init" ;;
+  *browse*|*open*) select_project_menu ;;
+  *add\ worktree*) add_worktree_menu ;;
+  *delete\ worktree*) delete_worktree_unified_menu ;;
+  *add\ project*) omarchy-launch-floating-terminal-with-presentation "omarchy-rails-worktree-init" ;;
   esac
+}
+
+add_worktree_menu() {
+  local projects
+  projects=$(get_projects_list)
+
+  if [[ -z "$projects" ]]; then
+    notify-send "No projects" "No projects registered. Use 'Add project' first."
+    show_main_menu
+    return
+  fi
+
+  local project_dir
+  project_dir=$(menu "Select project" "$projects")
+
+  if [[ "$project_dir" == "CNCLD" || -z "$project_dir" ]]; then
+    show_main_menu
+  else
+    cd "$project_dir" || die "Failed to change to project directory: $project_dir"
+    export APP_NAME
+    APP_NAME=$(basename "$project_dir")
+    omarchy-launch-floating-terminal-with-presentation "${SCRIPT_DIR}/omarchy-rails-worktree-create"
+  fi
+}
+
+delete_worktree_unified_menu() {
+  # Get all projects
+  local projects
+  projects=$(get_projects_list)
+
+  if [[ -z "$projects" ]]; then
+    notify-send "No projects" "No projects registered."
+    show_main_menu
+    return
+  fi
+
+  # Build unified list of all worktrees across all projects
+  local unified_list=""
+  while IFS= read -r project_dir; do
+    if [[ ! -d "$project_dir" ]]; then
+      continue
+    fi
+
+    local project_name
+    project_name=$(basename "$project_dir")
+
+    # Get branches for this project
+    cd "$project_dir" || continue
+    local branches
+    branches=$(worktree_list)
+
+    if [[ -n "$branches" ]]; then
+      while IFS= read -r branch; do
+        # Format: "project › branch" with embedded metadata
+        unified_list="${unified_list}${project_name} › ${branch}|${project_dir}|${branch}\n"
+      done <<< "$branches"
+    fi
+  done <<< "$projects"
+
+  if [[ -z "$unified_list" ]]; then
+    notify-send "No worktrees" "No worktrees found in any project."
+    show_main_menu
+    return
+  fi
+
+  # Show unified selection menu
+  local selection
+  selection=$(menu "Delete worktree" "$(echo -e "$unified_list" | sed 's/|.*$//')")
+
+  if [[ "$selection" == "CNCLD" || -z "$selection" ]]; then
+    show_main_menu
+    return
+  fi
+
+  # Parse selection to find the matching entry with metadata
+  local matched_line
+  matched_line=$(echo -e "$unified_list" | grep "^${selection}|")
+
+  if [[ -z "$matched_line" ]]; then
+    notify-send "Error" "Failed to parse selection"
+    show_main_menu
+    return
+  fi
+
+  # Extract project_dir and branch
+  local display project_dir branch
+  IFS='|' read -r display project_dir branch <<< "$matched_line"
+
+  # Set up environment
+  cd "$project_dir" || die "Failed to change to project directory: $project_dir"
+  export APP_NAME
+  APP_NAME=$(basename "$project_dir")
+
+  # Verify worktree directory
+  local worktree_dir
+  worktree_dir=$(get_worktree_dir "$branch")
+
+  # Safety check
+  if [[ "$worktree_dir" != *"/trees/"* ]]; then
+    notify-send "Cannot delete worktree" "Only worktrees in trees/ directory can be deleted"
+    show_main_menu
+    return
+  fi
+
+  # Launch deletion script
+  omarchy-launch-floating-terminal-with-presentation "$SCRIPT_DIR/omarchy-rails-worktree-delete" "$branch"
 }
 
 select_project_menu() {
@@ -88,7 +265,7 @@ select_project_menu() {
 
   if [[ -z "$projects" ]]; then
     notify-send "No projects" "No projects registered. Use 'Add project' first."
-    back_to show_main_menu
+    show_main_menu
     return
   fi
 
@@ -96,7 +273,7 @@ select_project_menu() {
   project_dir=$(menu "Open project" "$projects")
 
   if [[ "$project_dir" == "CNCLD" || -z "$project_dir" ]]; then
-    back_to show_main_menu
+    show_main_menu
   else
     cd "$project_dir" || die "Failed to change to project directory: $project_dir"
     export APP_NAME
@@ -170,6 +347,16 @@ start_or_connect_session() {
   project_dir=$(pwd)
   local session_name
   session_name=$(get_session_name "$APP_NAME" "$branch")
+
+  # Find the main project directory (go up from worktree dir if needed)
+  local main_project_dir="$project_dir"
+  if [[ "$project_dir" == *"/trees/"* ]]; then
+    # We're in a worktree, find the main project directory
+    main_project_dir=$(echo "$project_dir" | sed 's|/trees/.*||')
+  fi
+
+  # Record this worktree access
+  record_worktree_access "$main_project_dir" "$branch"
 
   if session_is_alive "$session_name"; then
     # Session is alive, attach to it
