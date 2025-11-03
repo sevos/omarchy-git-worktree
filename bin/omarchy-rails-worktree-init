@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# omarchy-rails-worktree-init: Track and initialize worktree workflow in a Rails project
+# omarchy-rails-worktree-init: Track and initialize worktree workflow in a git project
 # Usage: omarchy-rails-worktree-init <project-directory>
 #
 
@@ -20,7 +20,7 @@ check_dependencies gum git
 
 # Get project directory from argument or prompt
 if [[ -z "${1:-}" ]]; then
-  echo -e "\e[32mEnter the Rails project directory path:\e[0m"
+  echo -e "\e[32mEnter the git project directory path:\e[0m"
   PROJECT_DIRECTORY=$(gum input --placeholder="Project directory" --header="") || exit 1
 else
   PROJECT_DIRECTORY="$1"
@@ -33,8 +33,10 @@ fi
 # Validate and normalize the directory path
 PROJECT_DIRECTORY=$(validate_directory "$PROJECT_DIRECTORY")
 
-# Validate that it's a Rails project
-validate_rails_project "$PROJECT_DIRECTORY"
+# Validate that it's a git repository
+require_directory_exists "$PROJECT_DIRECTORY"
+cd "$PROJECT_DIRECTORY" || die "Failed to cd to $PROJECT_DIRECTORY"
+validate_git_repository "$PROJECT_DIRECTORY"
 
 # Add to projects list
 add_project_to_config "$PROJECT_DIRECTORY"

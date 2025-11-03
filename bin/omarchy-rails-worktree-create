@@ -21,18 +21,6 @@ check_dependencies gum git
 # Ensure we're in a git repository
 require_git_repository
 
-# Cleanup function for port locks
-PORT_OFFSET=""
-cleanup() {
-  if [[ -n "${PORT_OFFSET}" ]]; then
-    release_port_lock "$PORT_OFFSET"
-  fi
-}
-trap cleanup EXIT INT TERM
-
-# Clean up stale locks before starting
-cleanup_stale_locks
-
 # Get branch name from argument or prompt
 if [[ -z "${1:-}" ]]; then
   echo -e "\e[32mProvide a new or existing branch name\n\e[0m"
@@ -63,13 +51,6 @@ if [[ -e "$WORKTREE_DIR" ]]; then
   die "Directory already exists: $WORKTREE_DIR"
 fi
 
-# Allocate port with safe locking mechanism
-info "🔢 Allocating port..."
-PORT_OFFSET=$(safe_port_allocation "$WORKTREE_BASE_DIR")
-SERVER_PORT=$((SERVER_BASE_PORT + PORT_OFFSET * 10))
-
-info "Allocated port: $SERVER_PORT (offset: $PORT_OFFSET)"
-
 # Create git worktree
 info "🌳 Creating git worktree..."
 if git worktree add "$WORKTREE_DIR" "$BRANCH_NAME" 2>/dev/null; then
@@ -85,65 +66,21 @@ if ! git worktree list | grep -qF "$WORKTREE_DIR"; then
   die "Failed to create worktree"
 fi
 
-# Setup environment files
-info "📄 Setting up environment files..."
-if [[ -f ".env" ]]; then
-  cp ".env" "$WORKTREE_DIR/.env"
-  info "Copied .env file"
-elif [[ -f ".env.sample" ]]; then
-  cp ".env.sample" "$WORKTREE_DIR/.env"
-  warn "Copied .env.sample - you may need to configure API keys"
-else
-  warn "No .env or .env.sample found - creating minimal .env"
-  touch "$WORKTREE_DIR/.env"
-fi
-
-# Add port to .env
-echo "PORT=${SERVER_PORT}" >> "$WORKTREE_DIR/.env"
-
-# Link shared resources
-info "🔗 Linking shared resources..."
-
-link_shared_resource \
-  "config/master.key" \
-  "$WORKTREE_DIR/config/master.key" \
-  "master.key"
-
-link_shared_resource \
-  ".claude/settings.local.json" \
-  "$WORKTREE_DIR/.claude/settings.local.json" \
-  "Claude settings"
-
-# Install dependencies and setup
-info "📦 Installing dependencies..."
-cd "$WORKTREE_DIR" || die "Failed to cd to worktree directory"
-
-if [[ ! -f "bin/setup" ]]; then
-  die "bin/setup not found in worktree"
-fi
-
-# Run setup (allow it to fail without exiting)
-if bin/setup --skip-server 2>&1; then
-  info "✓ Setup completed successfully"
-else
-  warn "Setup completed with warnings"
-fi
-
-# Run validation if bin/ci exists
-if [[ -f "bin/ci" ]]; then
-  info "🔍 Running validation..."
-  if bin/ci 2>&1; then
-    info "✓ Validation passed"
-  else
-    warn "Validation failed - please review before using this worktree"
-  fi
+# Run module-specific setup scripts
+info "🔧 Running setup modules..."
+MODULES_DIR="${SCRIPT_DIR}/../modules"
+if [[ -d "$MODULES_DIR" ]]; then
+  for module_setup in "$MODULES_DIR"/*/setup; do
+    if [[ -x "$module_setup" ]]; then
+      "$module_setup" "$WORKTREE_DIR" "$BRANCH_NAME" "$PROJECT_DIR"
+    fi
+  done
 fi
 
 info ""
 info "✓ Worktree created successfully!"
 info "  Branch: $BRANCH_NAME"
 info "  Path: $WORKTREE_DIR"
-info "  Port: $SERVER_PORT"
 
 # Record this worktree in recent access list
 record_worktree_access "$PROJECT_DIR" "$BRANCH_NAME"
