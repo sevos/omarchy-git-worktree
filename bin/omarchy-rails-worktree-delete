@@ -1,0 +1,113 @@
+#!/bin/bash
+
+# omarchy-rails-worktree-delete: Delete a worktree and its associated zellij session
+# Usage: omarchy-rails-worktree-delete <branch>
+
+if [ -z "$1" ]; then
+  echo -e "\e[31mError: Branch name required\e[0m"
+  exit 1
+fi
+
+BRANCH_NAME="$1"
+WORKTREE_BASE_DIR=$(pwd)/trees
+WORKTREE_DIR="$WORKTREE_BASE_DIR/$BRANCH_NAME"
+
+# Validate worktree exists and is in trees/ directory
+if [ ! -d "$WORKTREE_DIR" ]; then
+  echo -e "\e[31mError: Worktree not found: $WORKTREE_DIR\e[0m"
+  exit 1
+fi
+
+# Get worktree path from git to ensure it's a valid worktree
+get_worktree_dir() {
+  local branch=$1
+  git worktree list --porcelain | grep -B2 -E "^branch refs/heads/$branch" | head -n 1 | sed 's/^worktree //'
+}
+
+ACTUAL_WORKTREE_DIR=$(get_worktree_dir "$BRANCH_NAME")
+
+if [ -z "$ACTUAL_WORKTREE_DIR" ]; then
+  echo -e "\e[31mError: Branch '$BRANCH_NAME' is not a valid worktree\e[0m"
+  exit 1
+fi
+
+# Safety check: Only allow deletion of worktrees in trees/ directory
+if [[ "$ACTUAL_WORKTREE_DIR" != *"/trees/"* ]]; then
+  echo -e "\e[31mError: Can only delete worktrees from trees/ directory\e[0m"
+  echo -e "Worktree location: $ACTUAL_WORKTREE_DIR"
+  exit 1
+fi
+
+# Show confirmation prompt
+echo -e "\e[33m⚠️  You are about to delete:\e[0m"
+echo -e "  Branch: \e[1m$BRANCH_NAME\e[0m"
+echo -e "  Path: \e[1m$ACTUAL_WORKTREE_DIR\e[0m"
+echo ""
+
+if ! gum confirm "Delete this worktree?"; then
+  echo -e "\e[32mCancelled\e[0m"
+  exit 0
+fi
+
+# Get session name (using APP_NAME from parent environment)
+if [ -z "$APP_NAME" ]; then
+  # Fallback: derive from current directory
+  APP_NAME=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
+fi
+
+SESSION_NAME="$APP_NAME-$BRANCH_NAME"
+
+echo ""
+echo -e "🧹 Cleaning up zellij session..."
+
+# Kill zellij session if running
+if command -v zellij &>/dev/null; then
+  ZELLIJ_SESSION=$(zellij list-sessions -n 2>/dev/null | grep -E "^$SESSION_NAME ")
+
+  if [ -n "$ZELLIJ_SESSION" ]; then
+    # Check if session is running (not EXITED)
+    if [ -z "$(echo "$ZELLIJ_SESSION" | grep "EXITED")" ]; then
+      echo "  Killing active session: $SESSION_NAME"
+      zellij kill-session "$SESSION_NAME" 2>/dev/null
+      sleep 0.5  # Give it time to shutdown gracefully
+    fi
+
+    # Delete session
+    echo "  Deleting session: $SESSION_NAME"
+    zellij delete-session "$SESSION_NAME" 2>/dev/null
+  else
+    echo "  No zellij session found for: $SESSION_NAME"
+  fi
+else
+  echo "  Zellij not available, skipping session cleanup"
+fi
+
+echo ""
+echo -e "🌳 Removing git worktree..."
+
+# Remove git worktree with --force flag
+if git worktree remove "$ACTUAL_WORKTREE_DIR" --force 2>&1; then
+  echo -e "\e[32m✓ Worktree deleted successfully\e[0m"
+  notify-send "Worktree deleted" "Branch: $BRANCH_NAME" 2>/dev/null
+  exit 0
+else
+  # Fallback: try prune and manual removal
+  echo -e "\e[33m⚠️  Git worktree remove failed, trying manual cleanup...\e[0m"
+
+  git worktree prune 2>/dev/null
+
+  if [ -d "$ACTUAL_WORKTREE_DIR" ]; then
+    rm -rf "$ACTUAL_WORKTREE_DIR" 2>/dev/null
+
+    if [ ! -d "$ACTUAL_WORKTREE_DIR" ]; then
+      echo -e "\e[32m✓ Worktree deleted (manual cleanup)\e[0m"
+      notify-send "Worktree deleted" "Branch: $BRANCH_NAME (manual cleanup)" 2>/dev/null
+      exit 0
+    fi
+  fi
+
+  echo -e "\e[31m✗ Failed to delete worktree\e[0m"
+  echo -e "  Please check manually: $ACTUAL_WORKTREE_DIR"
+  notify-send "Failed to delete worktree" "Branch: $BRANCH_NAME - Check manually" 2>/dev/null
+  exit 1
+fi

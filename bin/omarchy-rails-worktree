@@ -469,6 +469,7 @@ worktree_menu() {
   case $(menu "$(basename $(pwd))" "Open worktree\nAdd worktree\nDelete worktree") in
     *Open*) open_worktree_menu ;;
     *Add*) omarchy-launch-floating-terminal-with-presentation $SCRIPT_DIR/omarchy-rails-worktree-create ;;
+    *Delete*) delete_worktree_menu ;;
     *) back_to select_project_menu ;;
   esac
 }
@@ -483,6 +484,28 @@ open_worktree_menu() {
     cd $(get_worktree_dir $worktree)
     start_or_connect_session $worktree
   fi
+}
+
+delete_worktree_menu() {
+  worktree=$(menu "Delete worktree" "$(worktree_list)")
+
+  if [[ "$worktree" == "CNCLD" || -z "$worktree" ]]; then
+    back_to worktree_menu
+    return
+  fi
+
+  # Get worktree directory
+  worktree_dir=$(get_worktree_dir "$worktree")
+
+  # Safety check: Only allow deletion of worktrees in trees/ directory
+  if [[ "$worktree_dir" != *"/trees/"* ]]; then
+    notify-send "Cannot delete worktree" "Only worktrees in trees/ directory can be deleted"
+    back_to worktree_menu
+    return
+  fi
+
+  # Launch deletion script in floating terminal with presentation
+  omarchy-launch-floating-terminal-with-presentation "$SCRIPT_DIR/omarchy-rails-worktree-delete" "$worktree"
 }
 
 start_or_connect_session() {
