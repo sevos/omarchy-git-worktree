@@ -90,7 +90,7 @@ show_main_menu() {
 
   # Handle selection
   if [[ "$selection" == "CNCLD" || -z "$selection" ]]; then
-    exit 0
+    return 1  # Signal to exit
   elif [[ "$selection" =~ ^⚡ ]]; then
     # Recent item selected - open directly
     open_recent_worktree "$selection"
@@ -98,6 +98,7 @@ show_main_menu() {
     # Standard menu navigation
     go_to_menu "$selection"
   fi
+  return 0  # Continue showing menu
 }
 
 open_recent_worktree() {
@@ -159,7 +160,7 @@ add_worktree_menu() {
 
   if [[ -z "$projects" ]]; then
     notify-send "No projects" "No projects registered. Use 'Add project' first."
-    show_main_menu
+    back_to show_main_menu
     return
   fi
 
@@ -167,7 +168,7 @@ add_worktree_menu() {
   project_dir=$(menu "Select project" "$projects")
 
   if [[ "$project_dir" == "CNCLD" || -z "$project_dir" ]]; then
-    show_main_menu
+    back_to show_main_menu
   else
     cd "$project_dir" || die "Failed to change to project directory: $project_dir"
     export APP_NAME
@@ -183,7 +184,7 @@ delete_worktree_unified_menu() {
 
   if [[ -z "$projects" ]]; then
     notify-send "No projects" "No projects registered."
-    show_main_menu
+    back_to show_main_menu
     return
   fi
 
@@ -212,7 +213,7 @@ delete_worktree_unified_menu() {
 
   if [[ -z "$unified_list" ]]; then
     notify-send "No worktrees" "No worktrees found in any project."
-    show_main_menu
+    back_to show_main_menu
     return
   fi
 
@@ -221,7 +222,7 @@ delete_worktree_unified_menu() {
   selection=$(menu "Delete worktree" "$(echo -e "$unified_list" | sed 's/|.*$//')")
 
   if [[ "$selection" == "CNCLD" || -z "$selection" ]]; then
-    show_main_menu
+    back_to show_main_menu
     return
   fi
 
@@ -231,7 +232,7 @@ delete_worktree_unified_menu() {
 
   if [[ -z "$matched_line" ]]; then
     notify-send "Error" "Failed to parse selection"
-    show_main_menu
+    back_to show_main_menu
     return
   fi
 
@@ -251,7 +252,7 @@ delete_worktree_unified_menu() {
   # Safety check
   if [[ "$worktree_dir" != *"/trees/"* ]]; then
     notify-send "Cannot delete worktree" "Only worktrees in trees/ directory can be deleted"
-    show_main_menu
+    back_to show_main_menu
     return
   fi
 
@@ -265,7 +266,7 @@ select_project_menu() {
 
   if [[ -z "$projects" ]]; then
     notify-send "No projects" "No projects registered. Use 'Add project' first."
-    show_main_menu
+    back_to show_main_menu
     return
   fi
 
@@ -273,7 +274,7 @@ select_project_menu() {
   project_dir=$(menu "Open project" "$projects")
 
   if [[ "$project_dir" == "CNCLD" || -z "$project_dir" ]]; then
-    show_main_menu
+    back_to show_main_menu
   else
     cd "$project_dir" || die "Failed to change to project directory: $project_dir"
     export APP_NAME
@@ -376,5 +377,8 @@ if [[ -n "${1:-}" ]]; then
   BACK_TO_EXIT=true
   go_to_menu "$1"
 else
-  show_main_menu
+  # Keep showing main menu until user presses ESC
+  while show_main_menu; do
+    :  # Continue loop
+  done
 fi
