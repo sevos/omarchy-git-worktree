@@ -61,7 +61,7 @@ menu() {
 }
 
 terminal() {
-  xdg-terminal-exec --app-id=com.omarchy.Omarchy "$@"
+  xdg-terminal-exec "$@"
 }
 
 present_terminal() {
