@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Rails-specific setup for omarchy-rails-worktree
+# Rails-specific setup for omarchy-git-worktree
 # This module detects Rails projects and performs Rails-specific setup tasks.
 # Exits silently (status 0) if not a Rails project.
 #

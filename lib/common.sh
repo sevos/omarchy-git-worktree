@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Common functions for omarchy-rails-worktree
+# Common functions for omarchy-git-worktree
 #
 
 # Prevent multiple sourcing
@@ -14,7 +14,7 @@ COMMON_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Constants (only set if not already defined)
 if [[ -z "${WORKTREE_CONFIG_DIR:-}" ]]; then
-  readonly WORKTREE_CONFIG_DIR="${HOME}/.config/omarchy-rails-worktree"
+  readonly WORKTREE_CONFIG_DIR="${HOME}/.config/omarchy-git-worktree"
   readonly WORKTREE_PROJECTS_FILE="${WORKTREE_CONFIG_DIR}/projects"
   readonly WORKTREE_LOCK_DIR="${WORKTREE_CONFIG_DIR}/locks"
   readonly WORKTREE_RECENT_FILE="${WORKTREE_CONFIG_DIR}/recent_worktrees"

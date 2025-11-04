@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Claude-specific setup for omarchy-rails-worktree
+# Claude-specific setup for omarchy-git-worktree
 # This module detects Claude configuration and symlinks it to the worktree.
 # Exits silently (status 0) if Claude config is not found.
 #
