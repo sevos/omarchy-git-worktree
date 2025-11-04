@@ -24,9 +24,14 @@ validate_branch_name() {
     die "Invalid branch name: '$branch'. Branch names cannot contain spaces or special characters like ~^:?*[\\@{ or .."
   fi
 
+  # Cannot contain slashes (would create subdirectories in .worktrees/)
+  if [[ "$branch" =~ / ]]; then
+    die "Invalid branch name: '$branch'. Branch names cannot contain slashes ('/')"
+  fi
+
   # Cannot start with a dot or slash
-  if [[ "$branch" =~ ^\. || "$branch" =~ ^/ ]]; then
-    die "Invalid branch name: '$branch'. Branch names cannot start with '.' or '/'"
+  if [[ "$branch" =~ ^\. ]]; then
+    die "Invalid branch name: '$branch'. Branch names cannot start with '.'"
   fi
 
   # Cannot end with .lock
@@ -35,6 +40,75 @@ validate_branch_name() {
   fi
 
   return 0
+}
+
+# Prompt user for a valid branch name with retry on validation failure
+# This is for interactive use - wraps validation with retry logic
+# Returns the valid branch name on success, exits on max attempts or user cancellation
+#
+# Note: Keep validation logic in sync with validate_branch_name() above
+prompt_for_valid_branch_name() {
+  local branch_name=""
+  local max_attempts=5
+  local attempt=1
+
+  while [[ $attempt -le $max_attempts ]]; do
+    # Prompt for branch name
+    if [[ $attempt -eq 1 ]]; then
+      echo -e "\e[32mProvide a new or existing branch name\n\e[0m"
+    else
+      echo -e "\e[33mPlease try again with a valid branch name\n\e[0m"
+    fi
+
+    branch_name=$(gum input --placeholder="Branch name" --header="") || {
+      die "Cancelled by user"
+    }
+
+    # Validation checks (inline to allow retry instead of exit)
+
+    # Empty check
+    if [[ -z "$branch_name" ]]; then
+      warn "Branch name cannot be empty"
+      ((attempt++))
+      continue
+    fi
+
+    # Check for invalid characters in branch names
+    # Git branch names cannot contain: spaces, ~, ^, :, ?, *, [, \, .., @{, //
+    if [[ "$branch_name" =~ [[:space:]~^:?*\[\\\]] || "$branch_name" =~ \.\. || "$branch_name" =~ @\{ || "$branch_name" =~ // ]]; then
+      warn "Invalid branch name: '$branch_name'. Branch names cannot contain spaces or special characters like ~^:?*[\\@{ or .."
+      ((attempt++))
+      continue
+    fi
+
+    # Cannot contain slashes (would create subdirectories in .worktrees/)
+    if [[ "$branch_name" =~ / ]]; then
+      warn "Invalid branch name: '$branch_name'. Branch names cannot contain slashes ('/')"
+      ((attempt++))
+      continue
+    fi
+
+    # Cannot start with a dot or slash
+    if [[ "$branch_name" =~ ^\. ]]; then
+      warn "Invalid branch name: '$branch_name'. Branch names cannot start with '.'"
+      ((attempt++))
+      continue
+    fi
+
+    # Cannot end with .lock
+    if [[ "$branch_name" =~ \.lock$ ]]; then
+      warn "Invalid branch name: '$branch_name'. Branch names cannot end with '.lock'"
+      ((attempt++))
+      continue
+    fi
+
+    # All validation passed - return the valid branch name
+    echo "$branch_name"
+    return 0
+  done
+
+  # Exceeded max attempts
+  die "Maximum validation attempts ($max_attempts) exceeded"
 }
 
 # Validate and sanitize directory path
