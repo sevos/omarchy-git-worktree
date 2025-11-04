@@ -471,21 +471,16 @@ worktree_create_branch() {
   # Ensure we're in a git repository
   require_git_repository
 
-  # Get branch name from argument or prompt
+  # Get branch name from argument or prompt with validation
   local BRANCH_NAME
   if [[ -z "${1:-}" ]]; then
-    echo -e "\e[32mProvide a new or existing branch name\n\e[0m"
-    BRANCH_NAME=$(gum input --placeholder="Branch name" --header="") || exit 1
+    # Interactive mode: use prompt with retry on validation failure
+    BRANCH_NAME=$(prompt_for_valid_branch_name)
   else
+    # CLI argument mode: validate strictly (no retry)
     BRANCH_NAME="$1"
+    validate_branch_name "$BRANCH_NAME"
   fi
-
-  if [[ -z "$BRANCH_NAME" ]]; then
-    die "Branch name cannot be empty"
-  fi
-
-  # Validate branch name
-  validate_branch_name "$BRANCH_NAME"
 
   # Check if worktree already exists
   if worktree_exists "$BRANCH_NAME"; then
