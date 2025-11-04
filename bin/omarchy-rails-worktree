@@ -19,6 +19,9 @@ check_dependencies omarchy-launch-walker omarchy-launch-floating-terminal-with-p
 export ZELLIJ_LAYOUT_FILE
 ZELLIJ_LAYOUT_FILE=$(realpath "${SCRIPT_DIR}/../share/zellij-layout.kdl")
 
+# Ensure .worktrees/ is in global gitignore (run every time)
+ensure_worktrees_globally_ignored
+
 # Set to true when going directly to a submenu, so we can exit directly
 BACK_TO_EXIT=false
 

@@ -107,20 +107,35 @@ add_project_to_config() {
 }
 
 ensure_worktrees_globally_ignored() {
+  echo "DEBUG: Inside ensure_worktrees_globally_ignored" >&2
   local gitignore_path
 
-  # Check if global gitignore is already configured
-  gitignore_path=$(git config --global core.excludesfile)
+  # 1. Read git config for current global gitignore configuration
+  gitignore_path=$(git config --global core.excludesfile 2>/dev/null || true)
+  echo "DEBUG: git config gitignore_path='$gitignore_path'" >&2
 
-  if [[ -z "$gitignore_path" ]]; then
-    # Not configured, use standard location
-    gitignore_path="$HOME/.gitignore_global"
-    info "Configuring global gitignore at: $gitignore_path"
-    git config --global core.excludesfile "$gitignore_path"
-  else
+  if [[ -n "$gitignore_path" ]]; then
     # Expand tilde if present
     gitignore_path="${gitignore_path/#\~/$HOME}"
+    echo "DEBUG: Using configured gitignore: $gitignore_path" >&2
+  else
+    # 2. Check for existing default locations in $HOME
+    if [[ -f "$HOME/.gitignore_global" ]]; then
+      gitignore_path="$HOME/.gitignore_global"
+      echo "DEBUG: Found existing ~/.gitignore_global" >&2
+      info "Using existing global gitignore: $gitignore_path"
+      git config --global core.excludesfile "$gitignore_path"
+    else
+      # 3. Initialize in XDG default and set in git config
+      local xdg_config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+      gitignore_path="$xdg_config_home/git/ignore"
+      echo "DEBUG: Using XDG standard location: $gitignore_path" >&2
+      info "Configuring global gitignore at: $gitignore_path"
+      git config --global core.excludesfile "$gitignore_path"
+    fi
   fi
+
+  echo "DEBUG: Final gitignore_path='$gitignore_path'" >&2
 
   # Create parent directory if needed
   local parent_dir
@@ -136,6 +151,8 @@ ensure_worktrees_globally_ignored() {
     echo ".worktrees/" >> "$gitignore_path"
     info "Added .worktrees/ to global gitignore: $gitignore_path"
   fi
+
+  echo "DEBUG: Finished ensure_worktrees_globally_ignored" >&2
 }
 
 get_projects_list() {
@@ -360,6 +377,25 @@ parse_recent_selection() {
   echo "$branch"
 }
 
+# Git repository finder (interactive selection from $HOME)
+find_git_repos_under_home() {
+  echo -e "\e[33mSearching for git repositories under $HOME...\e[0m" >&2
+
+  local repos
+  repos=$(find "$HOME" -path "$HOME/.*" -prune -o -type d -name .git -print 2>/dev/null | sed 's|/.git$||' | sort)
+
+  if [[ -z "$repos" ]]; then
+    die "No git repositories found under $HOME"
+  fi
+
+  local selected
+  selected=$(echo "$repos" | gum filter --placeholder="Select a git repository..." --height=20) || {
+    die "No repository selected"
+  }
+
+  echo "$selected"
+}
+
 # Command functions (formerly standalone scripts)
 
 # Initialize and register a new project for worktree management
@@ -367,11 +403,11 @@ worktree_init_project() {
   # Check dependencies
   check_dependencies gum git
 
-  # Get project directory from argument or prompt
+  # Get project directory from argument or interactive selector
   local PROJECT_DIRECTORY
   if [[ -z "${1:-}" ]]; then
-    echo -e "\e[32mEnter the git project directory path:\e[0m"
-    PROJECT_DIRECTORY=$(gum input --placeholder="Project directory" --header="") || exit 1
+    PROJECT_DIRECTORY=$(find_git_repos_under_home)
+    echo "DEBUG: Selected directory: '$PROJECT_DIRECTORY'" >&2
   else
     PROJECT_DIRECTORY="$1"
   fi
@@ -380,19 +416,48 @@ worktree_init_project() {
     die "Project directory cannot be empty"
   fi
 
+  echo "DEBUG: Before validation: '$PROJECT_DIRECTORY'" >&2
   # Validate and normalize the directory path
   PROJECT_DIRECTORY=$(validate_directory "$PROJECT_DIRECTORY")
+  echo "DEBUG: After validation: '$PROJECT_DIRECTORY'" >&2
 
   # Validate that it's a git repository
+  echo "DEBUG: Checking directory exists..." >&2
   require_directory_exists "$PROJECT_DIRECTORY"
+  echo "DEBUG: Changing to directory..." >&2
   cd "$PROJECT_DIRECTORY" || die "Failed to cd to $PROJECT_DIRECTORY"
+  echo "DEBUG: Validating git repository..." >&2
   validate_git_repository "$PROJECT_DIRECTORY"
 
   # Add to projects list
+  echo "DEBUG: Adding to config..." >&2
   add_project_to_config "$PROJECT_DIRECTORY"
 
-  # Ensure .worktrees/ is in global gitignore
-  ensure_worktrees_globally_ignored
+  # Detect and add default branch to recent items
+  echo "DEBUG: Detecting default branch..." >&2
+  local default_branch
+  # Try to get the default branch from origin/HEAD
+  default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+
+  # Fallback: check current branch
+  if [[ -z "$default_branch" ]]; then
+    default_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+  fi
+
+  # Fallback: check for common default branches
+  if [[ -z "$default_branch" ]]; then
+    if git show-ref --verify --quiet refs/heads/main; then
+      default_branch="main"
+    elif git show-ref --verify --quiet refs/heads/master; then
+      default_branch="master"
+    fi
+  fi
+
+  if [[ -n "$default_branch" ]]; then
+    echo "DEBUG: Adding '$default_branch' to recent items..." >&2
+    record_worktree_access "$PROJECT_DIRECTORY" "$default_branch"
+    info "Added default branch '$default_branch' to recent items"
+  fi
 
   info "✓ Project registered: $PROJECT_DIRECTORY"
   info "You can now use 'omarchy-rails-worktree' to manage worktrees for this project"
