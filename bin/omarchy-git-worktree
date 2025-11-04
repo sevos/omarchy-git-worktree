@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# omarchy-rails-worktree: Main menu interface for managing Rails worktrees
+# omarchy-git-worktree: Main menu interface for managing Git worktrees
 #
 
 set -euo pipefail

@@ -1,13 +1,13 @@
-# omarchy-rails-worktree
+# omarchy-git-worktree
 
-A powerful bash-based tool for managing Git worktrees in Rails projects with integrated Zellij terminal multiplexer sessions. This tool streamlines the workflow of working with multiple branches simultaneously, each with its own isolated development environment.
+A powerful bash-based tool for managing Git worktrees with integrated Zellij terminal multiplexer sessions. This tool streamlines the workflow of working with multiple branches simultaneously, each with its own isolated development environment. Includes optional Rails-specific features through a modular system.
 
 ## Features
 
 - **Worktree Management**: Create, open, and delete Git worktrees with ease
 - **Environment Isolation**: Automatic port allocation and separate environment files for each worktree
 - **Session Management**: Integrated Zellij terminal sessions for each worktree
-- **Project Registry**: Manage multiple Rails projects from a single interface
+- **Project Registry**: Manage multiple projects from a single interface
 - **Interactive Menu System**: User-friendly menu navigation using dmenu-style interface
 - **Safe Operations**: Input validation, error handling, and file-based locking for port allocation
 - **Shared Resources**: Automatic linking of master.key and Claude settings across worktrees
@@ -37,25 +37,25 @@ This tool is part of the Omarchy ecosystem and requires these custom tools:
 
 1. Clone this repository:
    ```bash
-   git clone <repository-url> ~/.local/share/omarchy-rails-worktree
+   git clone <repository-url> ~/.local/share/omarchy-git-worktree
    ```
 
 2. Add the bin directory to your PATH:
    ```bash
-   export PATH="$HOME/.local/share/omarchy-rails-worktree/bin:$PATH"
+   export PATH="$HOME/.local/share/omarchy-git-worktree/bin:$PATH"
    ```
 
 3. Verify installation:
    ```bash
-   omarchy-rails-worktree --help
+   omarchy-git-worktree --help
    ```
 
 ## Project Structure
 
 ```
-omarchy-rails-worktree/
+omarchy-git-worktree/
 ├── bin/
-│   └── omarchy-rails-worktree           # Main menu interface
+│   └── omarchy-git-worktree           # Main menu interface
 ├── lib/
 │   ├── common.sh                        # Shared utility functions and command implementations
 │   └── validation.sh                    # Input validation functions
@@ -74,24 +74,24 @@ All operations are performed through the interactive menu interface. The tool is
 ### Launch the Interactive Menu
 
 ```bash
-omarchy-rails-worktree
+omarchy-git-worktree
 ```
 
 ### Main Menu Options
 
 The main menu provides access to:
-- **Browse all projects** - View and open registered Rails projects
+- **Browse all projects** - View and open registered projects
 - **Add worktree** - Create a new worktree in a registered project
 - **Delete worktree** - Remove an existing worktree
-- **Add project** - Register a new Rails project
+- **Add project** - Register a new project
 
 Recent worktrees are shown at the top for quick access.
 
-### Registering a Rails Project
+### Registering a Project
 
-1. Launch `omarchy-rails-worktree`
+1. Launch `omarchy-git-worktree`
 2. Select **"Add project"**
-3. Enter the path to your Rails project (or browse interactively)
+3. Enter the path to your project (or browse interactively)
 
 The tool will validate that the directory:
 - Exists and is accessible
@@ -101,7 +101,7 @@ The tool will validate that the directory:
 ### Creating a Worktree
 
 1. From the main menu, select **"Add worktree"**
-2. Choose the Rails project
+2. Choose the project
 3. Enter a branch name (new or existing)
 
 This will:
@@ -140,12 +140,12 @@ This will:
 Two ways to open a worktree:
 
 **Quick access (recent worktrees):**
-1. Launch `omarchy-rails-worktree`
+1. Launch `omarchy-git-worktree`
 2. Select from the recent worktrees shown at the top (⚡ icon)
 
 **Browse all worktrees:**
 1. Select **"Browse all projects"**
-2. Choose your Rails project
+2. Choose your project
 3. Select **"Open worktree"**
 4. Choose the branch
 
@@ -159,7 +159,7 @@ The tool will:
 
 ### Port Allocation
 
-Each worktree gets a unique port to run the Rails server without conflicts:
+Each worktree gets a unique port to run the development server without conflicts:
 
 - **Base port:** 3000
 - **Port calculation:** `3000 + (offset * 10)`
@@ -174,7 +174,7 @@ Example:
 
 ### Directory Structure
 
-For a Rails project at `/home/user/myapp`:
+For a project at `/home/user/myapp`:
 
 ```
 /home/user/myapp/                  # Main repository
@@ -212,8 +212,8 @@ The tool intelligently:
 
 ### Config Directory
 
-Configuration is stored in `~/.config/omarchy-rails-worktree/`:
-- `projects` - List of registered Rails projects (one path per line)
+Configuration is stored in `~/.config/omarchy-git-worktree/`:
+- `projects` - List of registered projects (one path per line)
 - `recent_worktrees` - Recently accessed worktrees for quick access (max 3)
 - `locks/` - Port allocation lock files for concurrent worktree creation
 
@@ -227,7 +227,7 @@ The default Zellij layout is defined in `share/zellij-layout.kdl`. Customize thi
 
 - Branch names are validated against Git naming rules
 - Directory paths are normalized and checked for path traversal attempts
-- Projects are validated as Git repositories and Rails applications
+- Projects are validated as Git repositories
 
 ### Error Handling
 
@@ -253,9 +253,9 @@ Install the missing tool(s) listed in the error message. See [Prerequisites](#pr
 ### Port conflicts
 
 If you see port conflicts:
-1. Check `~/.config/omarchy-rails-worktree/locks/` for stale locks
+1. Check `~/.config/omarchy-git-worktree/locks/` for stale locks
 2. Locks older than 1 hour are automatically cleaned up
-3. Manually remove stale locks if needed: `rm ~/.config/omarchy-rails-worktree/locks/port_*.lock`
+3. Manually remove stale locks if needed: `rm ~/.config/omarchy-git-worktree/locks/port_*.lock`
 
 ### Worktree creation fails
 
@@ -263,7 +263,7 @@ Check that:
 1. You're in a Git repository
 2. The branch name is valid (no spaces or special characters)
 3. The `.worktrees/` directory is writable
-4. `bin/setup` exists in your Rails project
+4. Module setup scripts exist if using modules (e.g., `bin/setup` for Rails projects)
 
 ### Zellij session issues
 

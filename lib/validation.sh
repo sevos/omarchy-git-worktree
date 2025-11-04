@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Input validation and sanitization for omarchy-rails-worktree
+# Input validation and sanitization for omarchy-git-worktree
 #
 
 # Source common functions if not already loaded

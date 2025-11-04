@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Rails-specific utilities for omarchy-rails-worktree
+# Rails-specific utilities for omarchy-git-worktree
 #
 # Note: This file expects WORKTREE_LOCK_DIR to be defined by the caller
 #       (typically from lib/common.sh)
@@ -10,7 +10,7 @@ readonly SERVER_BASE_PORT=3000
 
 # Use WORKTREE_LOCK_DIR from common.sh, or fall back to default if not set
 if [[ -z "${WORKTREE_LOCK_DIR:-}" ]]; then
-  WORKTREE_LOCK_DIR="${HOME}/.config/omarchy-rails-worktree/locks"
+  WORKTREE_LOCK_DIR="${HOME}/.config/omarchy-git-worktree/locks"
 fi
 
 # Port allocation with file-based locking
