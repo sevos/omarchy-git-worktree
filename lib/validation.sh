@@ -55,9 +55,9 @@ prompt_for_valid_branch_name() {
   while [[ $attempt -le $max_attempts ]]; do
     # Prompt for branch name
     if [[ $attempt -eq 1 ]]; then
-      echo -e "\e[32mProvide a new or existing branch name\n\e[0m"
+      echo -e "\e[32mProvide a new or existing branch name\n\e[0m" >&2
     else
-      echo -e "\e[33mPlease try again with a valid branch name\n\e[0m"
+      echo -e "\e[33mPlease try again with a valid branch name\n\e[0m" >&2
     fi
 
     branch_name=$(gum input --placeholder="Branch name" --header="") || {
