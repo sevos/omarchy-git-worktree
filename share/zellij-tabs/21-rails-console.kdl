@@ -1,0 +1,10 @@
+// META: name=Rails Console
+// META: category=framework
+// META: description=Rails interactive console
+// META: detector=rails-console
+
+tab name="Rails Console" {
+    pane command="bin/rails" {
+        args "console"
+    }
+}

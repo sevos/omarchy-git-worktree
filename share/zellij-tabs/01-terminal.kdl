@@ -1,0 +1,8 @@
+// META: name=Terminal
+// META: category=essential
+// META: description=General-purpose terminal
+// META: always_enabled=true
+
+tab name="Terminal" {
+    pane
+}

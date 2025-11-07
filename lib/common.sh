@@ -28,6 +28,12 @@ if [[ -z "$(type -t validate_branch_name 2>/dev/null)" ]]; then
   source "${COMMON_LIB_DIR}/validation.sh"
 fi
 
+# Source zellij manager functions if not already loaded
+if [[ -z "$(type -t detect_available_tabs 2>/dev/null)" ]]; then
+  # shellcheck source=lib/zellij-manager.sh
+  source "${COMMON_LIB_DIR}/zellij-manager.sh"
+fi
+
 # Error handling utilities
 die() {
   echo -e "\e[31mError: $*\e[0m" >&2
@@ -150,6 +156,14 @@ ensure_worktrees_globally_ignored() {
   else
     echo ".worktrees/" >> "$gitignore_path"
     info "Added .worktrees/ to global gitignore: $gitignore_path"
+  fi
+
+  # Add .worktrees/.zellij-layout.kdl pattern if not already present
+  if [[ -f "$gitignore_path" ]] && grep -qxF ".worktrees/.zellij-layout.kdl" "$gitignore_path"; then
+    info ".worktrees/.zellij-layout.kdl already in global gitignore"
+  else
+    echo ".worktrees/.zellij-layout.kdl" >> "$gitignore_path"
+    info "Added .worktrees/.zellij-layout.kdl to global gitignore: $gitignore_path"
   fi
 
   echo "DEBUG: Finished ensure_worktrees_globally_ignored" >&2
@@ -457,6 +471,20 @@ worktree_init_project() {
     echo "DEBUG: Adding '$default_branch' to recent items..." >&2
     record_worktree_access "$PROJECT_DIRECTORY" "$default_branch"
     info "Added default branch '$default_branch' to recent items"
+  fi
+
+  # Configure Zellij layout if not already configured
+  if [[ ! -f "$PROJECT_DIRECTORY/.worktrees/.zellij-layout.kdl" ]]; then
+    info "Configuring Zellij layout for this project..."
+
+    # Ensure required variables are available for the subprocess
+    export SHARE_DIR="${COMMON_LIB_DIR}/../share"
+    export MODULES_DIR
+
+    # Launch tab configurator
+    bash "${COMMON_LIB_DIR}/tab-configurator.sh" "$PROJECT_DIRECTORY" || {
+      warn "Layout configuration cancelled or failed. You can configure it later via the menu."
+    }
   fi
 
   info "✓ Project registered: $PROJECT_DIRECTORY"

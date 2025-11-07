@@ -1,0 +1,8 @@
+// META: name=Claude
+// META: category=development
+// META: description=Claude AI coding assistant
+// META: detector=claude
+
+tab name="Claude" {
+    pane command="claude"
+}
