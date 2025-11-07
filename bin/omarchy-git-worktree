@@ -8,6 +8,7 @@ set -euo pipefail
 # Get script directory and load libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/../lib"
+export SHARE_DIR="${SCRIPT_DIR}/../share"
 
 # shellcheck source=lib/common.sh
 source "${LIB_DIR}/common.sh"
@@ -300,7 +301,7 @@ select_project_menu() {
 
 worktree_menu() {
   local choice
-  choice=$(menu "$(basename "$(pwd)")" "Open worktree\nAdd worktree\nDelete worktree")
+  choice=$(menu "$(basename "$(pwd)")" "Open worktree\nAdd worktree\nDelete worktree\nConfigure Zellij layout")
 
   case "$choice" in
     *Open*) open_worktree_menu ;;
@@ -310,6 +311,11 @@ worktree_menu() {
       omarchy-launch-floating-terminal-with-presentation "bash -c 'set -euo pipefail; cd \"${project_dir}\"; source \"${LIB_DIR}/common.sh\"; worktree_create_branch'"
       ;;
     *Delete*) delete_worktree_menu ;;
+    *Configure*)
+      local project_dir
+      project_dir=$(pwd)
+      omarchy-launch-floating-terminal-with-presentation "bash -c 'set -euo pipefail; cd \"${project_dir}\"; export SHARE_DIR=\"${SHARE_DIR}\"; export MODULES_DIR=\"${MODULES_DIR}\"; bash \"${LIB_DIR}/tab-configurator.sh\" \"${project_dir}\"'"
+      ;;
     *) back_to select_project_menu ;;
   esac
 }
@@ -381,16 +387,34 @@ start_or_connect_session() {
   # Record this worktree access
   record_worktree_access "$main_project_dir" "$branch"
 
+  # Check if layout is configured, if not run configurator
+  if [[ ! -f "$main_project_dir/.worktrees/.zellij-layout.kdl" ]]; then
+    info "Zellij layout not configured for this project. Launching configurator..."
+    omarchy-launch-floating-terminal-with-presentation "bash -c 'set -euo pipefail; cd \"${main_project_dir}\"; export SHARE_DIR=\"${SHARE_DIR}\"; export MODULES_DIR=\"${MODULES_DIR}\"; bash \"${LIB_DIR}/tab-configurator.sh\" \"${main_project_dir}\"'"
+
+    # Wait a moment for the configuration to be saved
+    sleep 0.5
+
+    # Check if configuration was saved or cancelled
+    if [[ ! -f "$main_project_dir/.worktrees/.zellij-layout.kdl" ]]; then
+      warn "Layout configuration was cancelled. Using global default layout."
+    fi
+  fi
+
+  # Get the appropriate layout file (project-specific or global)
+  local layout_file
+  layout_file=$(get_layout_file "$main_project_dir")
+
   if session_is_alive "$session_name"; then
     # Session is alive, attach to it
     terminal -e bash -c "zellij attach \"$session_name\""
   elif session_exists "$session_name"; then
     # Session exists but is dead, recreate it
     zellij delete-session "$session_name" 2>/dev/null || true
-    terminal -e bash -c "cd \"$project_dir\" && zellij --session \"$session_name\" --new-session-with-layout \"$ZELLIJ_LAYOUT_FILE\""
+    terminal -e bash -c "cd \"$project_dir\" && zellij --session \"$session_name\" --new-session-with-layout \"$layout_file\""
   else
     # Fresh start
-    terminal -e bash -c "cd \"$project_dir\" && zellij --session \"$session_name\" --new-session-with-layout \"$ZELLIJ_LAYOUT_FILE\""
+    terminal -e bash -c "cd \"$project_dir\" && zellij --session \"$session_name\" --new-session-with-layout \"$layout_file\""
   fi
 }
 

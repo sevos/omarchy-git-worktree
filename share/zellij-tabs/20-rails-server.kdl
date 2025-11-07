@@ -1,0 +1,8 @@
+// META: name=Rails Server
+// META: category=framework
+// META: description=Rails development server (bin/dev)
+// META: detector=rails-server
+
+tab name="Web server" {
+    pane command="bin/dev"
+}

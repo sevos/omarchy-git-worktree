@@ -1,0 +1,8 @@
+// META: name=Editor
+// META: category=essential
+// META: description=Code editor for the current directory
+// META: always_enabled=true
+
+tab name="Editor" {
+    pane edit="."
+}

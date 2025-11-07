@@ -1,0 +1,25 @@
+#!/bin/bash
+# Rails detection script
+# Returns list of available Rails-related tabs
+
+set -euo pipefail
+
+PROJECT_DIR="${1:-$PWD}"
+
+detect_rails_server() {
+    # Check if bin/dev exists (preferred) or bin/rails for server
+    if [[ -f "$PROJECT_DIR/Gemfile" ]] && [[ -x "$PROJECT_DIR/bin/dev" || -x "$PROJECT_DIR/bin/rails" ]]; then
+        echo "rails-server"
+    fi
+}
+
+detect_rails_console() {
+    # Check if bin/rails exists for console
+    if [[ -f "$PROJECT_DIR/Gemfile" ]] && [[ -x "$PROJECT_DIR/bin/rails" ]]; then
+        echo "rails-console"
+    fi
+}
+
+# Run all detections
+detect_rails_server
+detect_rails_console

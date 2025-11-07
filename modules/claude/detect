@@ -1,0 +1,16 @@
+#!/bin/bash
+# Claude detection script
+# Returns list of available Claude-related tabs
+
+set -euo pipefail
+
+PROJECT_DIR="${1:-$PWD}"
+
+detect_claude() {
+    # Check if Claude settings exist in main repo
+    if [[ -f "$PROJECT_DIR/.claude/settings.local.json" ]]; then
+        echo "claude"
+    fi
+}
+
+detect_claude
